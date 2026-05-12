@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 2cm; }
+  body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 12pt; color: #333; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 24px; }
+  .company-name { font-size: 20pt; font-weight: bold; }
+  .invoice-title { font-size: 22pt; font-weight: bold; text-align: right; }
+  .invoice-no { font-size: 10pt; color: #666; text-align: right; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .info-block { padding: 12px; background: #f8f8f8; border-radius: 4px; }
+  .info-block label { font-size: 9pt; color: #999; display: block; margin-bottom: 4px; }
+  .info-block .value { font-size: 12pt; font-weight: 600; }
+  .amount-box { border: 2px solid #333; padding: 20px; text-align: center; margin: 24px 0; }
+  .amount-box .label { font-size: 11pt; color: #666; }
+  .amount-box .amount { font-size: 28pt; font-weight: bold; color: #000; letter-spacing: 2px; }
+  .rate-note { font-size: 9pt; color: #999; margin-top: 8px; }
+  .footer { margin-top: 48px; display: flex; justify-content: space-between; }
+  .stamp-area { text-align: center; }
+  .stamp-area img { max-height: 80px; opacity: 0.85; }
+  .sign-line { border-top: 1px solid #999; width: 200px; margin-top: 8px; padding-top: 4px; font-size: 9pt; color: #999; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="company-name">供货Invoice</div>
+    <div style="font-size:10pt;color:#666;margin-top:4px;">供应商 / Supplier</div>
+  </div>
+  <div>
+    <div class="invoice-title">INVOICE</div>
+    <div class="invoice-no">No. {{ settlement.invoice_number }}</div>
+    <div class="invoice-no">Date: {{ now.strftime('%Y-%m-%d') }}</div>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div class="info-block">
+    <label>账期 / Period</label>
+    <div class="value">{{ settlement.period_start.strftime('%Y-%m-%d') }} ~ {{ settlement.period_end.strftime('%Y-%m-%d') }}</div>
+  </div>
+  <div class="info-block">
+    <label>结算状态 / Status</label>
+    <div class="value">{{ "已结清 Settled" if settlement.status.value == "settled" else "待付款 Pending" }}</div>
+  </div>
+  <div class="info-block">
+    <label>供货总额(RMB) / Supply Total</label>
+    <div class="value">¥ {{ "%.2f"|format(settlement.total_supply_rmb) }}</div>
+  </div>
+  <div class="info-block">
+    <label>退款扣减(RMB) / Refund Deduction</label>
+    <div class="value" style="color:#c00;">- ¥ {{ "%.2f"|format(settlement.total_refund_rmb) }}</div>
+  </div>
+  <div class="info-block">
+    <label>净供货额(RMB) / Net Supply</label>
+    <div class="value">¥ {{ "%.2f"|format(settlement.net_supply_rmb) }}</div>
+  </div>
+  <div class="info-block">
+    <label>汇率 / Exchange Rate</label>
+    <div class="value">1 HKD = {{ settlement.hkd_rate }} CNY</div>
+  </div>
+</div>
+
+<div class="amount-box">
+  <div class="label">应付金额 / Amount Due</div>
+  <div class="amount">HKD {{ "%.2f"|format(settlement.payment_amount_hkd) }}</div>
+  <div class="rate-note">按汇率 1 HKD = {{ settlement.hkd_rate }} CNY 折算</div>
+  {% if settlement.actual_payment_hkd %}
+  <div class="rate-note" style="color:#090;margin-top:8px;">实际已付: HKD {{ "%.2f"|format(settlement.actual_payment_hkd) }} ✓</div>
+  {% endif %}
+</div>
+
+{% if settlement.notes %}
+<div style="padding:12px;border-left:3px solid #ccc;margin-bottom:24px;font-size:10pt;color:#666;">
+  <strong>备注：</strong>{{ settlement.notes }}
+</div>
+{% endif %}
+
+<div class="footer">
+  <div>
+    <div class="sign-line">收款方签章 / Payee Signature</div>
+    <br>
+    <div class="sign-line">付款方签章 / Payer Signature</div>
+  </div>
+  <div class="stamp-area">
+    <div style="font-size:9pt;color:#999;margin-bottom:8px;">公章 / Company Seal</div>
+    <!-- 公章图片在部署时替换为实际路径 -->
+    <!-- <img src="/static/seal.png" alt="公章"> -->
+    <div style="border:1px dashed #ccc;width:100px;height:100px;line-height:100px;text-align:center;color:#ccc;font-size:9pt;">公章</div>
+  </div>
+</div>
+</body>
+</html>

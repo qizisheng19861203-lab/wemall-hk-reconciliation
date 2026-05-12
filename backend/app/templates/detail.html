@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: A4; margin: 1.5cm; }
+  body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 9pt; color: #333; }
+  h1 { font-size: 14pt; text-align: center; margin-bottom: 4px; }
+  .subtitle { text-align: center; color: #666; font-size: 9pt; margin-bottom: 16px; }
+  .summary { display: flex; gap: 12px; margin-bottom: 16px; }
+  .summary-item { flex: 1; background: #f5f5f5; padding: 8px; border-radius: 3px; text-align: center; }
+  .summary-item .label { font-size: 8pt; color: #999; }
+  .summary-item .val { font-size: 11pt; font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+  th { background: #333; color: #fff; padding: 6px 4px; text-align: center; }
+  td { padding: 5px 4px; border-bottom: 1px solid #eee; }
+  tr:nth-child(even) { background: #fafafa; }
+  .refunded { color: #c00; text-decoration: line-through; }
+  .total-row { background: #f0f0f0 !important; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>供货明细对账单</h1>
+<div class="subtitle">Invoice No. {{ settlement.invoice_number }} | {{ settlement.period_start.strftime('%Y-%m-%d') }} ~ {{ settlement.period_end.strftime('%Y-%m-%d') }}</div>
+
+<div class="summary">
+  <div class="summary-item"><div class="label">订单数</div><div class="val">{{ orders|length }}</div></div>
+  <div class="summary-item"><div class="label">供货总额(RMB)</div><div class="val">¥{{ "%.2f"|format(settlement.total_supply_rmb) }}</div></div>
+  <div class="summary-item"><div class="label">退款扣减(RMB)</div><div class="val" style="color:#c00;">-¥{{ "%.2f"|format(settlement.total_refund_rmb) }}</div></div>
+  <div class="summary-item"><div class="label">净供货额(RMB)</div><div class="val">¥{{ "%.2f"|format(settlement.net_supply_rmb) }}</div></div>
+  <div class="summary-item"><div class="label">汇率</div><div class="val">{{ settlement.hkd_rate }}</div></div>
+  <div class="summary-item"><div class="label">应付(HKD)</div><div class="val">HK${{ "%.2f"|format(settlement.payment_amount_hkd) }}</div></div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:18%">微盟订单号</th>
+      <th style="width:10%">下单日期</th>
+      <th style="width:22%">商品名称</th>
+      <th style="width:5%">SKU</th>
+      <th style="width:4%">数量</th>
+      <th style="width:8%">零售价</th>
+      <th style="width:8%">供货价</th>
+      <th style="width:9%">供货小计</th>
+      <th style="width:8%">发货状态</th>
+      <th style="width:8%">退款</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    {% for item in order.items %}
+    <tr class="{{ 'refunded' if order.is_refunded else '' }}">
+      {% if loop.first %}
+      <td rowspan="{{ order.items|length }}">{{ order.wemall_order_id }}</td>
+      <td rowspan="{{ order.items|length }}">{{ order.order_date.strftime('%m-%d') }}</td>
+      {% endif %}
+      <td>{{ item.product_name }}</td>
+      <td>{{ item.sku or '-' }}</td>
+      <td style="text-align:center">{{ item.quantity }}</td>
+      <td style="text-align:right">{{ "¥%.2f"|format(item.retail_price) if item.retail_price else '-' }}</td>
+      <td style="text-align:right">{{ "¥%.2f"|format(item.supply_price) if item.supply_price else '⚠待录入' }}</td>
+      <td style="text-align:right">{{ "¥%.2f"|format(item.supply_subtotal) if item.supply_subtotal else '-' }}</td>
+      {% if loop.first %}
+      <td rowspan="{{ order.items|length }}" style="text-align:center">
+        {{ {"pending":"待发货","shipped":"已发货","delivered":"已签收","returned":"已退货"}.get(order.shipping_status.value, order.shipping_status.value) }}
+      </td>
+      <td rowspan="{{ order.items|length }}" style="text-align:center;color:#c00;">
+        {{ "退款¥%.2f"|format(order.refund_amount) if order.is_refunded else '' }}
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    {% endfor %}
+    <tr class="total-row">
+      <td colspan="7" style="text-align:right">合计 / Total</td>
+      <td style="text-align:right">¥{{ "%.2f"|format(settlement.net_supply_rmb) }}</td>
+      <td colspan="2"></td>
+    </tr>
+  </tbody>
+</table>
+
+<div style="margin-top:16px;font-size:8pt;color:#999;text-align:right;">
+  生成时间: {{ now.strftime('%Y-%m-%d %H:%M') }}
+</div>
+</body>
+</html>
