@@ -21,7 +21,7 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Restart containers
+      - name: Rebuild and restart containers
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -29,6 +29,9 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            docker compose up -d --build --remove-orphans
+            docker compose build --no-cache backend frontend
+            docker compose up -d --remove-orphans
+            docker compose exec -T backend pip install bcrypt==4.0.1 -i https://mirrors.tencent.com/pypi/simple/
+            docker compose restart backend
             docker image prune -f
             echo "部署完成 $(date)"
