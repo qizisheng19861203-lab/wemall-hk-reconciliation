@@ -19,9 +19,10 @@
             <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="180">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" link type="warning" @click="openResetPwd(row)">重置密码</el-button>
             <el-button size="small" link type="danger" @click="toggleActive(row)">
               {{ row.is_active ? '停用' : '启用' }}
             </el-button>
@@ -55,8 +56,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { users as usersApi } from '@/api'
+import http from '@/api/http'
 
 const users = ref([])
 const loading = ref(false)
@@ -97,6 +99,19 @@ async function save() {
     load()
   } catch (e) { ElMessage.error(e.message) }
   finally { saving.value = false }
+}
+
+async function openResetPwd(row) {
+  try {
+    const { value } = await ElMessageBox.prompt(`请输入 ${row.display_name} 的新密码`, '重置密码', {
+      confirmButtonText: '确认重置',
+      cancelButtonText: '取消',
+      inputPattern: /.{6,}/,
+      inputErrorMessage: '密码至少6位',
+    })
+    await http.post(`/users/${row.id}/reset-password`, { new_password: value })
+    ElMessage.success('密码已重置')
+  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message) }
 }
 
 async function toggleActive(row) {
