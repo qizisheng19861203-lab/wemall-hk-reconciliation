@@ -38,12 +38,11 @@ class SettlementNotification(Base):
     __tablename__ = "settlement_notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    settlement_id = Column(Integer, nullable=False)
+    settlement_id = Column(Integer, ForeignKey("settlements.id"), nullable=False)
     channel = Column(String(20), nullable=False, comment="sms / wecom / email")
     recipient = Column(String(100), nullable=False)
     message = Column(Text, nullable=True)
     status = Column(String(20), default="sent")
     sent_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    settlement = relationship("Settlement", back_populates="notifications", foreign_keys=[settlement_id],
-                              primaryjoin="SettlementNotification.settlement_id == Settlement.id")
+    settlement = relationship("Settlement", back_populates="notifications")
