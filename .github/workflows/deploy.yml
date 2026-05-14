@@ -21,8 +21,8 @@ jobs:
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avz --delete --exclude='.env' --exclude='static/' --exclude='__pycache__/'
-          path: backend/app/
-          remote_path: /opt/wemall-hk/backend/app/
+          path: backend/
+          remote_path: /opt/wemall-hk/backend/
           remote_host: ${{ secrets.SERVER_HOST }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
@@ -55,6 +55,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            # 简单重启，不删除容器
+            # 清理 Python 缓存并重启
+            docker compose exec -T backend bash /app/reload.sh || true
             docker compose restart backend nginx
             echo "部署完成 $(date)"
