@@ -31,10 +31,10 @@ class WemallAPI:
             resp.raise_for_status()
             data = resp.json()
 
-            if data.get("errcode") != "0":
-                raise Exception(f"获取 access_token 失败: {data.get('errmsg', 'unknown')}")
+            if "access_token" not in data:
+                raise Exception(f"获取 access_token 失败: {data}")
 
-            self._access_token = data["data"]["access_token"]
+            self._access_token = data["access_token"]
             return self._access_token
 
     async def _request(self, endpoint: str, payload: dict) -> dict:
