@@ -36,9 +36,29 @@ class WemallAPI:
                 raise Exception(f"获取 access_token 失败: {data}")
 
             self._access_token = data["access_token"]
-            # business_id 用于 API 请求中的 vid
             self._business_id = data.get("business_id", self.shop_id)
             return self._access_token
+
+    async def _get_organization_vid(self) -> int:
+        """获取组织 vid（通过 bos/organization/getList 接口）"""
+        token = await self._get_access_token()
+        url = f"https://dopen.weimob.com/apigw/bos/v2.0/organization/getList?accesstoken={token}"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json={})
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("code", {}).get("errcode") != 0:
+                errmsg = data.get("code", {}).get("errmsg", "unknown")
+                raise Exception(f"获取组织列表失败: {errmsg}")
+
+            org_list = data.get("data", [])
+            if not org_list:
+                raise Exception("组织列表为空，请检查店铺配置")
+
+            # 返回第一个组织的 vid
+            return org_list[0].get("vid")
 
     async def _request(self, endpoint: str, payload: dict) -> dict:
         """统一请求方法"""
@@ -59,6 +79,10 @@ class WemallAPI:
     async def get_products(self, page: int = 1, page_size: int = 50) -> dict:
         """获取商品列表"""
         await self._get_access_token()
+
+        # 获取正确的组织 vid
+        vid = await self._get_organization_vid()
+
         payload = {
             "pageNum": page,
             "pageSize": page_size,
@@ -67,7 +91,7 @@ class WemallAPI:
                 "searchType": 1,
             },
             "basicInfo": {
-                "vid": int(self._business_id or self.shop_id),
+                "vid": vid,
             },
         }
         return await self._request("goods/getList", payload)
