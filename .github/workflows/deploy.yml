@@ -55,14 +55,12 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            # 清除 Python 缓存（避免导入旧模块）
-            echo "清除 Python 缓存..."
+            # 停止容器，清除缓存，重新启动
+            docker compose stop backend
             docker compose exec -T backend find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-            docker compose exec -T backend find /app -name "*.pyc" -delete 2>/dev/null || true
-            # 优雅重启：先重启 backend，等待就绪后再重启 nginx
-            docker compose restart backend
+            docker compose start backend
             echo "等待 backend 启动..."
-            sleep 5
+            sleep 8
             # 检查 backend 是否就绪
             for i in {1..10}; do
               if docker compose exec -T backend curl -f http://localhost:8000/health 2>/dev/null; then
