@@ -22,7 +22,7 @@ class WemallAPI:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 "https://dopen.weimob.com/fuwu/b/oauth2/token",
-                json={
+                data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "grant_type": "client_credentials",
