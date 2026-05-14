@@ -13,6 +13,7 @@ class WemallAPI:
         self.shop_id = settings.WEMALL_SHOP_ID
         self.base_url = "https://dopen.weimob.com/apigw/weimob_shop/v2.0"
         self._access_token: Optional[str] = None
+        self._business_id: Optional[str] = None
 
     async def _get_access_token(self) -> str:
         """获取 access_token（使用 client_credentials 授权）"""
@@ -35,6 +36,8 @@ class WemallAPI:
                 raise Exception(f"获取 access_token 失败: {data}")
 
             self._access_token = data["access_token"]
+            # business_id 用于 API 请求中的 vid
+            self._business_id = data.get("business_id", self.shop_id)
             return self._access_token
 
     async def _request(self, endpoint: str, payload: dict) -> dict:
@@ -55,15 +58,16 @@ class WemallAPI:
 
     async def get_products(self, page: int = 1, page_size: int = 50) -> dict:
         """获取商品列表"""
+        await self._get_access_token()
         payload = {
             "pageNum": page,
             "pageSize": page_size,
             "queryParameter": {
-                "goodsStatus": 0,  # 0=全部
+                "goodsStatus": 0,
                 "searchType": 1,
             },
             "basicInfo": {
-                "vid": int(self.shop_id),
+                "vid": int(self._business_id or self.shop_id),
             },
         }
         return await self._request("goods/getList", payload)
