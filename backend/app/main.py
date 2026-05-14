@@ -46,3 +46,15 @@ app.include_router(reports_router, prefix="/api")
 @app.get("/health")
 def health():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/debug/wemall-config")
+def debug_wemall_config():
+    """调试端点：查看微盟 API 配置"""
+    from app.services.wemall_api import WemallAPI
+    api = WemallAPI()
+    return {
+        "base_url": api.base_url,
+        "client_id": api.client_id[:10] + "..." if api.client_id else None,
+        "shop_id": api.shop_id,
+    }
