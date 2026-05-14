@@ -55,12 +55,12 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            # 停止容器，清除缓存，重新启动
+            # 完全重启 backend 容器以重新加载代码
             docker compose stop backend
-            docker compose exec -T backend find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-            docker compose start backend
+            docker compose rm -f backend
+            docker compose up -d backend
             echo "等待 backend 启动..."
-            sleep 8
+            sleep 10
             # 检查 backend 是否就绪
             for i in {1..10}; do
               if docker compose exec -T backend curl -f http://localhost:8000/health 2>/dev/null; then
