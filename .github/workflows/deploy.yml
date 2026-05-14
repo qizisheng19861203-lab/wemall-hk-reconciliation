@@ -55,5 +55,18 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            docker compose restart backend nginx
+            # 优雅重启：先重启 backend，等待就绪后再重启 nginx
+            docker compose restart backend
+            echo "等待 backend 启动..."
+            sleep 5
+            # 检查 backend 是否就绪
+            for i in {1..10}; do
+              if docker compose exec -T backend curl -f http://localhost:8000/health 2>/dev/null; then
+                echo "Backend 已就绪"
+                break
+              fi
+              echo "等待 backend 启动... ($i/10)"
+              sleep 2
+            done
+            docker compose restart nginx
             echo "部署完成 $(date)"

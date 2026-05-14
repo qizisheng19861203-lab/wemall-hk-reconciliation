@@ -17,8 +17,23 @@ http.interceptors.response.use(
       localStorage.removeItem('token')
       router.push('/login')
     }
-    const msg = err.response?.data?.detail || err.message || '请求失败'
-    return Promise.reject(new Error(typeof msg === 'string' ? msg : JSON.stringify(msg)))
+
+    // 显示详细错误信息（内部系统，方便调试）
+    let msg = err.response?.data?.detail || err.message || '请求失败'
+
+    // 如果是对象，转成 JSON 字符串
+    if (typeof msg === 'object') {
+      msg = JSON.stringify(msg, null, 2)
+    }
+
+    // 添加 HTTP 状态码和 URL 信息
+    const status = err.response?.status
+    const url = err.config?.url
+    if (status || url) {
+      msg = `${msg}\n\n[${status || 'Network Error'}] ${url || ''}`
+    }
+
+    return Promise.reject(new Error(msg))
   }
 )
 
