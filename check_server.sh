@@ -1,0 +1,10 @@
+#!/bin/bash
+echo "=== 检查服务器状态 ==="
+echo ""
+echo "1. 检查容器运行状态："
+curl -s https://weimob.blue-medicine.com/health || echo "健康检查失败"
+echo ""
+echo ""
+echo "2. 测试 API 端点："
+curl -s https://weimob.blue-medicine.com/api/products -H "Authorization: Bearer test" || echo "API 端点无响应"
+echo ""

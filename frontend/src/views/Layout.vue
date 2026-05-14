@@ -60,13 +60,14 @@
       </el-header>
       <el-main class="main">
         <router-view />
+        <div class="version-info">v{{ backendVersion || '...' }}</div>
       </el-main>
     </el-container>
   </el-container>
 </template>
 
 <script setup>
-import { computed, ref, reactive } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -75,6 +76,16 @@ import http from '@/api/http'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+const backendVersion = ref('')
+
+onMounted(async () => {
+  try {
+    const health = await http.get('/health')
+    backendVersion.value = health.version
+  } catch (e) {
+    console.error('获取版本信息失败', e)
+  }
+})
 
 const titleMap = {
   '/dashboard': '总览',
@@ -121,5 +132,6 @@ async function submitChangePassword() {
 .sidebar-logo { padding: 18px 20px; display: flex; align-items: center; gap: 10px; color: #fff; font-size: 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .header { background: #fff; border-bottom: 1px solid #ebeef5; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
 .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.main { background: #f4f6fa; padding: 24px; overflow-y: auto; }
+.main { background: #f4f6fa; padding: 24px; overflow-y: auto; position: relative; }
+.version-info { position: fixed; bottom: 8px; right: 8px; font-size: 11px; color: #999; background: rgba(255,255,255,0.8); padding: 2px 8px; border-radius: 4px; }
 </style>

@@ -45,7 +45,16 @@ app.include_router(reports_router, prefix="/api")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "app": settings.APP_NAME}
+    import os
+    from datetime import datetime
+    # 使用文件修改时间作为版本标识
+    version = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y%m%d-%H%M%S")
+    return {
+        "status": "ok",
+        "app": settings.APP_NAME,
+        "version": version,
+        "wemall_api_configured": bool(settings.WEMALL_APP_KEY),
+    }
 
 
 @app.get("/debug/wemall-config")
