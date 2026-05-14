@@ -34,12 +34,15 @@ services:
       DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-wemall2024}@db:3306/wemall_hk
       REDIS_URL: redis://redis:6379/0
     volumes:
+      - ./backend/app:/app/app
       - ./backend/app/templates:/app/app/templates
       - ./static:/app/static
 
   frontend:
     build: ./frontend
     restart: always
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html
 
   nginx:
     image: nginx:alpine
