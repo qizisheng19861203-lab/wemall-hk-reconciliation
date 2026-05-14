@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     WEMALL_APP_KEY: str = ""
     WEMALL_APP_SECRET: str = ""
     WEMALL_SHOP_ID: str = ""
-    WEMALL_API_BASE: str = "https://api.weimob.com"
 
     # Exchange Rate API
     EXCHANGE_RATE_API_KEY: str = ""
