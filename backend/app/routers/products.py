@@ -65,26 +65,35 @@ async def sync_products_from_wemall(
     """从微盟API同步产品"""
     api = WemallAPI()
     try:
-        products_data = await api.get_products()
+        result = await api.get_products()
+        products_data = result.get("pageList", [])
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"微盟API错误: {str(e)}")
 
     created, updated = 0, 0
     for item in products_data:
-        existing = db.query(Product).filter(Product.wemall_product_id == str(item["productId"])).first()
+        goods_id = str(item.get("goodsId"))
+        existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
+        # 提取价格（取最低售价）
+        price_info = item.get("goodsPrice", {})
+        retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
+
         if existing:
-            existing.name = item.get("productName", existing.name)
-            existing.image_url = item.get("mainPic", existing.image_url)
-            existing.retail_price = item.get("price")
+            existing.name = item.get("title", existing.name)
+            existing.image_url = item.get("defaultImageUrl", existing.image_url)
+            if retail_price:
+                existing.retail_price = retail_price
             updated += 1
         else:
             product = Product(
-                wemall_product_id=str(item["productId"]),
-                name=item.get("productName", ""),
-                image_url=item.get("mainPic"),
-                retail_price=item.get("price"),
+                wemall_product_id=goods_id,
+                name=item.get("title", ""),
+                sku=item.get("outerGoodsCode", ""),
+                image_url=item.get("defaultImageUrl"),
+                retail_price=retail_price,
             )
             db.add(product)
             created += 1
     db.commit()
-    return {"created": created, "updated": updated}
+    return {"created": created, "updated": updated, "total": len(products_data)}
