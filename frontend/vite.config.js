@@ -10,16 +10,6 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  build: {
-    rollupOptions: {
-      output: {
-        // 添加时间戳到文件名，强制浏览器刷新
-        entryFileNames: `assets/[name].[hash].${Date.now()}.js`,
-        chunkFileNames: `assets/[name].[hash].${Date.now()}.js`,
-        assetFileNames: `assets/[name].[hash].${Date.now()}.[ext]`
-      }
-    }
-  },
   server: {
     proxy: {
       '/api': {

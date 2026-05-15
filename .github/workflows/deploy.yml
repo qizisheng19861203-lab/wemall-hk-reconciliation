@@ -11,12 +11,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build frontend
-        run: |
-          cd frontend
-          npm install --registry=https://registry.npmmirror.com
-          npm run build
-
       - name: Sync backend code to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -27,12 +21,12 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Sync frontend dist to server
+      - name: Sync frontend source to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avz --delete
-          path: frontend/dist/
-          remote_path: /opt/wemall-hk/frontend/dist/
+          switches: -avz --delete --exclude='node_modules/' --exclude='dist/'
+          path: frontend/
+          remote_path: /opt/wemall-hk/frontend/
           remote_host: ${{ secrets.SERVER_HOST }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
@@ -47,18 +41,26 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Restart backend and nginx
+      - name: Build and restart on server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 15m
           script: |
+            # 安装node（如果没有）
+            if ! command -v node &> /dev/null; then
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            cd /opt/wemall-hk/frontend
+            # 在服务器上安装依赖并构建
+            npm install --registry=https://registry.npmmirror.com
+            npm run build
             cd /opt/wemall-hk
             # 清理 Python 缓存
             docker compose exec -T backend bash /app/reload.sh || true
-            # 重新构建并重启frontend（确保使用最新配置）
-            docker compose up -d --build --force-recreate frontend
-            # 重启backend和nginx
-            docker compose restart backend nginx
+            # 重启所有服务
+            docker compose restart backend frontend nginx
             echo "部署完成 $(date)"
