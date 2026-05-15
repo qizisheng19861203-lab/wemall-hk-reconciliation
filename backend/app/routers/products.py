@@ -64,36 +64,50 @@ async def sync_products_from_wemall(
 ):
     """从微盟API同步产品"""
     api = WemallAPI()
-    try:
-        result = await api.get_products()
-        products_data = result.get("pageList", [])
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"微盟API错误: {str(e)}")
-
     created, updated = 0, 0
-    for item in products_data:
-        goods_id = str(item.get("goodsId"))
-        existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
 
-        # 提取价格（取最低售价）
-        price_info = item.get("goodsPrice", {})
-        retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
+    page = 1
+    while True:
+        try:
+            result = await api.get_products(page=page, page_size=20)
+            products_data = result.get("pageList", [])
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"微盟API错误: {str(e)}")
 
-        if existing:
-            existing.name = item.get("title", existing.name)
-            existing.image_url = item.get("defaultImageUrl", existing.image_url)
-            if retail_price:
-                existing.retail_price = retail_price
-            updated += 1
-        else:
-            product = Product(
-                wemall_product_id=goods_id,
-                name=item.get("title", ""),
-                sku=item.get("outerGoodsCode", ""),
-                image_url=item.get("defaultImageUrl"),
-                retail_price=retail_price,
-            )
-            db.add(product)
-            created += 1
-    db.commit()
-    return {"created": created, "updated": updated, "total": len(products_data)}
+        if not products_data:
+            break
+
+        for item in products_data:
+            goods_id = str(item.get("goodsId"))
+            existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
+            # 提取价格（取最低售价）
+            price_info = item.get("goodsPrice", {})
+            retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
+
+            if existing:
+                existing.name = item.get("title", existing.name)
+                existing.image_url = item.get("defaultImageUrl", existing.image_url)
+                if retail_price:
+                    existing.retail_price = retail_price
+                updated += 1
+            else:
+                product = Product(
+                    wemall_product_id=goods_id,
+                    name=item.get("title", ""),
+                    sku=item.get("outerGoodsCode", ""),
+                    image_url=item.get("defaultImageUrl"),
+                    retail_price=retail_price,
+                )
+                db.add(product)
+                created += 1
+
+        db.commit()
+
+        # 检查是否还有下一页
+        total_count = result.get("totalCount", 0)
+        if page * 20 >= total_count:
+            break
+        page += 1
+
+    return {"created": created, "updated": updated, "total": created + updated}
