@@ -4,7 +4,7 @@
       <div><h2>产品库</h2></div>
       <div style="display:flex;gap:8px" v-if="auth.isAdmin">
         <el-upload
-          :action="`${import.meta.env.VITE_API_BASE_URL}/products/import-supply-price`"
+          :action="`${apiBaseUrl}/products/import-supply-price`"
           :headers="{ Authorization: `Bearer ${auth.token}` }"
           :show-file-list="false"
           :on-success="handleImportSuccess"
@@ -87,6 +87,7 @@ import { products as productsApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 const products = ref([])
 const loading = ref(false)
 const syncing = ref(false)
