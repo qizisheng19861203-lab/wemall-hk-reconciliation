@@ -22,12 +22,12 @@
           <el-breadcrumb>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
+          <div class="version-badge" v-if="backendVersion">
+            <span class="version-text">版本 {{ backendVersion }}</span>
+            <span class="update-time" v-if="updateTime">· 更新于 {{ updateTime }}</span>
+          </div>
         </div>
         <div class="header-right">
-          <div class="version-badge">
-            <el-tag size="small" type="success">v{{ backendVersion || '...' }}</el-tag>
-            <span class="update-time" v-if="updateTime">{{ updateTime }}</span>
-          </div>
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-avatar size="small" :style="{ background: '#409EFF' }">{{ auth.user?.display_name?.[0] }}</el-avatar>
@@ -136,9 +136,11 @@ async function submitChangePassword() {
 .sidebar { background: #1a2035; overflow: hidden; display: flex; flex-direction: column; }
 .sidebar-logo { padding: 18px 20px; display: flex; align-items: center; gap: 10px; color: #fff; font-size: 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .header { background: #fff; border-bottom: 1px solid #ebeef5; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
-.header-right { display: flex; align-items: center; gap: 20px; }
-.version-badge { display: flex; align-items: center; gap: 8px; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.version-badge { display: flex; align-items: center; gap: 4px; background: #f0f9eb; border: 1px solid #b3e19d; border-radius: 4px; padding: 2px 10px; }
+.version-text { font-size: 12px; color: #67c23a; font-weight: 600; }
 .update-time { font-size: 12px; color: #909399; }
+.header-right { display: flex; align-items: center; gap: 20px; }
 .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .main { background: #f4f6fa; padding: 24px; overflow-y: auto; position: relative; }
 </style>
