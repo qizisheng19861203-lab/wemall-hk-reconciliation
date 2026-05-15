@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
@@ -7,6 +7,8 @@ from app.models.user import User, UserRole
 from app.core.deps import get_current_user, require_admin
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.services.wemall_api import WemallAPI
+import pandas as pd
+import io
 
 router = APIRouter(prefix="/products", tags=["产品管理"])
 
@@ -111,3 +113,114 @@ async def sync_products_from_wemall(
         page += 1
 
     return {"created": created, "updated": updated, "total": created + updated}
+
+
+@router.post("/sync-by-ids")
+async def sync_products_by_ids(
+    product_ids: List[str],
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """批量同步指定的商品ID（支持商品ID或商品编码）"""
+    api = WemallAPI()
+    created, updated, not_found = 0, 0, 0
+
+    for product_id in product_ids:
+        try:
+            # 尝试通过商品ID获取详情
+            result = await api.get_product_detail(str(product_id).strip())
+            item = result.get("goods", {})
+
+            if not item:
+                not_found += 1
+                continue
+
+            goods_id = str(item.get("goodsId"))
+            existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
+            # 提取价格
+            price_info = item.get("goodsPrice", {})
+            retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
+
+            if existing:
+                existing.name = item.get("title", existing.name)
+                existing.image_url = item.get("defaultImageUrl", existing.image_url)
+                if retail_price:
+                    existing.retail_price = retail_price
+                updated += 1
+            else:
+                product = Product(
+                    wemall_product_id=goods_id,
+                    name=item.get("title", ""),
+                    sku=item.get("outerGoodsCode", ""),
+                    image_url=item.get("defaultImageUrl"),
+                    retail_price=retail_price,
+                )
+                db.add(product)
+                created += 1
+
+        except Exception as e:
+            not_found += 1
+            continue
+
+    db.commit()
+    return {"created": created, "updated": updated, "not_found": not_found}
+
+
+@router.post("/import-supply-price")
+async def import_supply_price(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """导入Excel更新供货价（支持商品ID或商品编码匹配）"""
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="只支持Excel文件(.xlsx, .xls)")
+
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+
+        # 检查必需的列
+        required_cols = ['商品ID', '供货价']
+        if not all(col in df.columns for col in required_cols):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Excel必须包含以下列: {', '.join(required_cols)}"
+            )
+
+        updated, not_found = 0, 0
+        not_found_list = []
+
+        for _, row in df.iterrows():
+            goods_id = str(row['商品ID']).strip()
+            supply_price = float(row['供货价'])
+
+            # 先尝试用商品ID匹配
+            product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
+            # 如果没找到，尝试用商品编码匹配
+            if not product and '商品编码' in df.columns:
+                goods_code = str(row['商品编码']).strip()
+                product = db.query(Product).filter(Product.sku == goods_code).first()
+
+            if product:
+                product.supply_price = supply_price
+                updated += 1
+            else:
+                not_found += 1
+                not_found_list.append({
+                    "goods_id": goods_id,
+                    "title": row.get('商品标题', ''),
+                })
+
+        db.commit()
+
+        return {
+            "updated": updated,
+            "not_found": not_found,
+            "not_found_list": not_found_list[:20],  # 最多返回20个未找到的
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"处理Excel失败: {str(e)}")

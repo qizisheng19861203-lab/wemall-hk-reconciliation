@@ -138,3 +138,14 @@ class WemallAPI:
             },
         }
         return await self._request("order/detail/get", payload)
+
+    async def get_product_detail(self, goods_id: str) -> dict:
+        """获取商品详情"""
+        vid = await self._get_organization_vid()
+        payload = {
+            "goodsId": int(goods_id),
+            "basicInfo": {
+                "vid": vid,
+            },
+        }
+        return await self._request("goods/detail/get", payload)
