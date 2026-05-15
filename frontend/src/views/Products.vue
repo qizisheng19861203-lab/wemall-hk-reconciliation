@@ -14,8 +14,8 @@
         >
           <el-button type="success">导入供货价</el-button>
         </el-upload>
-        <el-button @click="syncProducts" :loading="syncing">同步微盟产品</el-button>
-        <el-button type="primary" @click="openAdd">新增产品</el-button>
+        <el-button type="success" @click="syncRecentProducts" :loading="syncingRecent">同步最近20个产品</el-button>
+        <el-button @click="syncProducts" :loading="syncing">同步全部产品</el-button>
       </div>
     </div>
 
@@ -91,6 +91,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 const products = ref([])
 const loading = ref(false)
 const syncing = ref(false)
+const syncingRecent = ref(false)
 const saving = ref(false)
 const dialog = ref(false)
 const editingId = ref(null)
@@ -137,6 +138,16 @@ async function syncProducts() {
     load()
   } catch (e) { ElMessage.error(e.message) }
   finally { syncing.value = false }
+}
+
+async function syncRecentProducts() {
+  syncingRecent.value = true
+  try {
+    const res = await productsApi.syncWemall()
+    ElMessage.success(`同步最近20个产品完成：新增${res.created}，更新${res.updated}`)
+    load()
+  } catch (e) { ElMessage.error(e.message) }
+  finally { syncingRecent.value = false }
 }
 
 function beforeUpload(file) {

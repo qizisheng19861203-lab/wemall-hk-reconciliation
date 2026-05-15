@@ -61,15 +61,18 @@ def update_product(
 
 @router.post("/sync-wemall")
 async def sync_products_from_wemall(
+    page_limit: int = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """从微盟API同步产品"""
+    """从微盟API同步产品（默认只同步第1页20个产品）"""
     api = WemallAPI()
     created, updated = 0, 0
 
     page = 1
-    while True:
+    max_pages = page_limit if page_limit else 1  # 默认只同步第1页
+
+    while page <= max_pages:
         try:
             result = await api.get_products(page=page, page_size=20)
             products_data = result.get("pageList", [])
@@ -105,6 +108,10 @@ async def sync_products_from_wemall(
                 created += 1
 
         db.commit()
+
+        # 如果没有指定page_limit，只同步第1页就退出
+        if not page_limit:
+            break
 
         # 检查是否还有下一页
         total_count = result.get("totalCount", 0)
