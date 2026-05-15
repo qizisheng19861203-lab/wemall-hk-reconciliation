@@ -24,6 +24,10 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <div class="version-badge">
+            <el-tag size="small" type="success">v{{ backendVersion || '...' }}</el-tag>
+            <span class="update-time" v-if="updateTime">{{ updateTime }}</span>
+          </div>
           <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-avatar size="small" :style="{ background: '#409EFF' }">{{ auth.user?.display_name?.[0] }}</el-avatar>
@@ -60,7 +64,6 @@
       </el-header>
       <el-main class="main">
         <router-view />
-        <div class="version-info">v{{ backendVersion || '...' }}</div>
       </el-main>
     </el-container>
   </el-container>
@@ -77,11 +80,13 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const backendVersion = ref('')
+const updateTime = ref('')
 
 onMounted(async () => {
   try {
     const health = await http.get('/health')
     backendVersion.value = health.version
+    updateTime.value = health.update_time
   } catch (e) {
     console.error('获取版本信息失败', e)
   }
@@ -131,7 +136,9 @@ async function submitChangePassword() {
 .sidebar { background: #1a2035; overflow: hidden; display: flex; flex-direction: column; }
 .sidebar-logo { padding: 18px 20px; display: flex; align-items: center; gap: 10px; color: #fff; font-size: 16px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .header { background: #fff; border-bottom: 1px solid #ebeef5; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+.header-right { display: flex; align-items: center; gap: 20px; }
+.version-badge { display: flex; align-items: center; gap: 8px; }
+.update-time { font-size: 12px; color: #909399; }
 .user-info { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .main { background: #f4f6fa; padding: 24px; overflow-y: auto; position: relative; }
-.version-info { position: fixed; bottom: 8px; right: 8px; font-size: 11px; color: #999; background: rgba(255,255,255,0.8); padding: 2px 8px; border-radius: 4px; }
 </style>

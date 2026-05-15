@@ -48,11 +48,14 @@ def health():
     import os
     from datetime import datetime
     # 使用文件修改时间作为版本标识
-    version = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y%m%d-%H%M%S")
+    mtime = os.path.getmtime(__file__)
+    version = datetime.fromtimestamp(mtime).strftime("%Y%m%d-%H%M%S")
+    update_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
     return {
         "status": "ok",
         "app": settings.APP_NAME,
         "version": version,
+        "update_time": update_time,
         "wemall_api_configured": bool(settings.WEMALL_APP_KEY),
     }
 
