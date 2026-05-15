@@ -55,8 +55,10 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
-            # 清理 Python 缓存并重启
+            # 清理 Python 缓存
             docker compose exec -T backend bash /app/reload.sh || true
-            # 重启所有服务（包括frontend）
-            docker compose restart backend frontend nginx
+            # 重新构建并重启frontend（确保使用最新配置）
+            docker compose up -d --build --force-recreate frontend
+            # 重启backend和nginx
+            docker compose restart backend nginx
             echo "部署完成 $(date)"
