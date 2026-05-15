@@ -3,6 +3,17 @@
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
       <div><h2>产品库</h2></div>
       <div style="display:flex;gap:8px" v-if="auth.isAdmin">
+        <el-upload
+          :action="`${import.meta.env.VITE_API_BASE_URL}/products/import-supply-price`"
+          :headers="{ Authorization: `Bearer ${auth.token}` }"
+          :show-file-list="false"
+          :on-success="handleImportSuccess"
+          :on-error="handleImportError"
+          :before-upload="beforeUpload"
+          accept=".xlsx,.xls"
+        >
+          <el-button type="success">导入供货价</el-button>
+        </el-upload>
         <el-button @click="syncProducts" :loading="syncing">同步微盟产品</el-button>
         <el-button type="primary" @click="openAdd">新增产品</el-button>
       </div>
@@ -71,7 +82,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { products as productsApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -125,6 +136,40 @@ async function syncProducts() {
     load()
   } catch (e) { ElMessage.error(e.message) }
   finally { syncing.value = false }
+}
+
+function beforeUpload(file) {
+  const isExcel = file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                  file.type === 'application/vnd.ms-excel'
+  if (!isExcel) {
+    ElMessage.error('只能上传Excel文件(.xlsx, .xls)')
+    return false
+  }
+  const isLt5M = file.size / 1024 / 1024 < 5
+  if (!isLt5M) {
+    ElMessage.error('文件大小不能超过5MB')
+    return false
+  }
+  return true
+}
+
+function handleImportSuccess(response) {
+  const { updated, not_found, not_found_list } = response
+  let msg = `导入成功：更新了${updated}个产品的供货价`
+  if (not_found > 0) {
+    msg += `，${not_found}个产品未找到`
+    if (not_found_list && not_found_list.length > 0) {
+      const list = not_found_list.map(item => `${item.goods_id} - ${item.title}`).join('\n')
+      ElMessageBox.alert(list, '以下产品未找到', { confirmButtonText: '知道了' })
+    }
+  }
+  ElMessage.success(msg)
+  load()
+}
+
+function handleImportError(error) {
+  const msg = error.message || '导入失败'
+  ElMessage.error(msg)
 }
 
 onMounted(load)
