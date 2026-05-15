@@ -84,9 +84,10 @@ const updateTime = ref('')
 
 onMounted(async () => {
   try {
-    const health = await http.get('/health')
-    backendVersion.value = health.version
-    updateTime.value = health.update_time
+    const res = await fetch('/health')
+    const data = await res.json()
+    backendVersion.value = data.version
+    updateTime.value = data.update_time
   } catch (e) {
     console.error('获取版本信息失败', e)
   }
