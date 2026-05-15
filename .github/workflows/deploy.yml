@@ -11,6 +11,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm install --registry=https://registry.npmmirror.com
+          npm run build
+
       - name: Sync backend code to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -21,17 +27,17 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Sync frontend source to server
+      - name: Sync frontend dist to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avz --delete --exclude='node_modules/' --exclude='dist/'
-          path: frontend/
-          remote_path: /opt/wemall-hk/frontend/
+          switches: -avz --delete
+          path: frontend/dist/
+          remote_path: /opt/wemall-hk/frontend/dist/
           remote_host: ${{ secrets.SERVER_HOST }}
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Sync nginx config
+      - name: Sync docker and nginx config
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avz
@@ -41,23 +47,13 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
-      - name: Build and restart on server
+      - name: Restart services
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 15m
           script: |
-            # 安装node（如果没有）
-            if ! command -v node &> /dev/null; then
-              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-              sudo apt-get install -y nodejs
-            fi
-            cd /opt/wemall-hk/frontend
-            # 在服务器上安装依赖并构建
-            npm install --registry=https://registry.npmmirror.com
-            npm run build
             cd /opt/wemall-hk
             # 清理 Python 缓存
             docker compose exec -T backend bash /app/reload.sh || true
