@@ -41,24 +41,28 @@ class WemallAPI:
 
     async def _get_organization_vid(self) -> int:
         """获取组织 vid（通过 bos/organization/getList 接口）"""
+        if hasattr(self, "_org_vid") and self._org_vid:
+            return self._org_vid
+
         token = await self._get_access_token()
         url = f"https://dopen.weimob.com/apigw/bos/v2.0/organization/getList?accesstoken={token}"
 
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json={})
+            resp = await client.post(url, json={"pageNum": 1, "pageSize": 20})
             resp.raise_for_status()
             data = resp.json()
 
-            if data.get("code", {}).get("errcode") != 0:
+            if data.get("code", {}).get("errcode") != "0":
                 errmsg = data.get("code", {}).get("errmsg", "unknown")
                 raise Exception(f"获取组织列表失败: {errmsg}")
 
-            org_list = data.get("data", [])
+            # 响应结构: data.data[].vid
+            org_list = data.get("data", {}).get("data", [])
             if not org_list:
                 raise Exception("组织列表为空，请检查店铺配置")
 
-            # 返回第一个组织的 vid
-            return org_list[0].get("vid")
+            self._org_vid = org_list[0].get("vid")
+            return self._org_vid
 
     async def _request(self, endpoint: str, payload: dict) -> dict:
         """统一请求方法"""
@@ -103,33 +107,34 @@ class WemallAPI:
         page: int = 1,
         page_size: int = 50,
     ) -> dict:
-        """获取订单列表
-
-        Args:
-            start_time: 开始时间戳（毫秒）
-            end_time: 结束时间戳（毫秒）
-            page: 页码
-            page_size: 每页数量
-        """
+        """获取订单列表"""
+        vid = await self._get_organization_vid()
         payload = {
             "pageNum": page,
             "pageSize": page_size,
             "queryParameter": {
-                "searchType": 8,  # 按时间查询
+                "searchType": 8,
                 "queryTime": {
                     "startTime": start_time,
                     "endTime": end_time,
-                    "type": 0,  # 0=下单时间
+                    "type": 0,
                 },
-                "orderDomains": [1, 2, 3],  # 查询商品详情
+                "orderDomains": [1, 2, 3],
+            },
+            "basicInfo": {
+                "vid": vid,
             },
         }
         return await self._request("order/list/search", payload)
 
     async def get_order_detail(self, order_no: str) -> dict:
         """获取订单详情"""
+        vid = await self._get_organization_vid()
         payload = {
             "orderNo": order_no,
             "orderDomains": [1, 2, 3],
+            "basicInfo": {
+                "vid": vid,
+            },
         }
         return await self._request("order/detail/get", payload)
