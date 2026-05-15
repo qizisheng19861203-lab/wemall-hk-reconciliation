@@ -31,8 +31,8 @@ async def sync_orders(
         page = 1
         while True:
             result = await api.get_orders(start_ts, end_ts, page=page, page_size=50)
-            # 响应结构: data.list[]
-            orders_list = result.get("list", [])
+            # 响应结构: data.pageList[]
+            orders_list = result.get("pageList", [])
             if not orders_list:
                 break
 
@@ -103,7 +103,7 @@ async def sync_orders(
 
             db.commit()
 
-            total_count = result.get("total", 0)
+            total_count = result.get("totalCount", 0)
             if page * 50 >= total_count:
                 break
             page += 1
