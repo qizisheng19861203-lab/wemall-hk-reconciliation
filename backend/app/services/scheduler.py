@@ -34,8 +34,8 @@ async def _daily_order_sync():
 def start_scheduler():
     # 每天早上9点更新汇率
     scheduler.add_job(_daily_exchange_rate, CronTrigger(hour=9, minute=0), id="daily_rate")
-    # 每小时同步一次订单
-    scheduler.add_job(_daily_order_sync, CronTrigger(minute=30), id="hourly_orders")
+    # 每2小时同步一次订单
+    scheduler.add_job(_daily_order_sync, CronTrigger(hour='*/2', minute=30), id="order_sync")
     scheduler.start()
     logger.info("Scheduler started")
 

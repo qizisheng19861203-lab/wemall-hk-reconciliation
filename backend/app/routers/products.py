@@ -199,7 +199,15 @@ async def import_supply_price(
         not_found_list = []
 
         for _, row in df.iterrows():
-            supply_price = float(row['供货价'])
+            # 跳过供货价为空的行
+            raw_price = row['供货价']
+            if pd.isna(raw_price):
+                continue
+            try:
+                supply_price = float(raw_price)
+            except (ValueError, TypeError):
+                continue
+
             product = None
 
             # 优先使用商品编码匹配（这是最准确的）
@@ -211,6 +219,9 @@ async def import_supply_price(
             # 如果商品编码没找到，尝试用商品ID匹配
             if not product and '商品ID' in df.columns:
                 goods_id = str(row['商品ID']).strip()
+                # 处理数字格式的ID（如 7553141818.0）
+                if '.' in goods_id:
+                    goods_id = goods_id.split('.')[0]
                 if goods_id and goods_id != 'nan':
                     product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
 
@@ -219,10 +230,11 @@ async def import_supply_price(
                 updated += 1
             else:
                 not_found += 1
+                # 确保not_found_list里没有NaN值
                 not_found_list.append({
-                    "goods_code": row.get('商品编码', ''),
-                    "goods_id": row.get('商品ID', ''),
-                    "title": row.get('商品标题', ''),
+                    "goods_code": str(row.get('商品编码', '') or '').replace('nan', ''),
+                    "goods_id": str(row.get('商品ID', '') or '').replace('nan', ''),
+                    "title": str(row.get('商品标题', '') or '').replace('nan', ''),
                 })
 
         db.commit()

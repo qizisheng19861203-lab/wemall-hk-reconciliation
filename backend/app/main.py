@@ -46,11 +46,26 @@ app.include_router(reports_router, prefix="/api")
 @app.get("/health")
 def health():
     import os
-    from datetime import datetime
-    # 使用文件修改时间作为版本标识
-    mtime = os.path.getmtime(__file__)
-    version = datetime.fromtimestamp(mtime).strftime("%Y%m%d-%H%M%S")
-    update_time = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+    import subprocess
+    from datetime import datetime, timezone, timedelta
+    CST = timezone(timedelta(hours=8))
+    # 用git commit hash作为版本号
+    try:
+        git_hash = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL
+        ).decode().strip()
+        git_time_raw = subprocess.check_output(
+            ['git', 'log', '-1', '--format=%ct'],
+            cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL
+        ).decode().strip()
+        update_dt = datetime.fromtimestamp(int(git_time_raw), tz=CST)
+        version = git_hash
+        update_time = update_dt.strftime("%Y-%m-%d %H:%M CST")
+    except Exception:
+        now = datetime.now(CST)
+        version = now.strftime("%Y%m%d-%H%M%S")
+        update_time = now.strftime("%Y-%m-%d %H:%M CST")
     return {
         "status": "ok",
         "app": settings.APP_NAME,

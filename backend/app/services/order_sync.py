@@ -64,7 +64,14 @@ async def sync_orders(
 
                 if existing:
                     existing.shipping_status = shipping_status
+                    if shipping_status == ShippingStatus.RETURNED:
+                        existing.is_refunded = True
                     updated += 1
+                    continue
+
+                # 退款/退货订单不入库
+                if shipping_status == ShippingStatus.RETURNED:
+                    skipped += 1
                     continue
 
                 order = Order(

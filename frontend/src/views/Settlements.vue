@@ -130,7 +130,13 @@ async function fetchTodayRate() {
 async function loadUnsettledOrders() {
   loadingOrders.value = true
   try {
-    unsettledOrders.value = await ordersApi.list({ unsettled_only: true, limit: 200 })
+    unsettledOrders.value = await ordersApi.list({
+      unsettled_only: true,
+      is_refunded: false,
+      start_date: createForm.period_start ? new Date(createForm.period_start).toISOString() : undefined,
+      end_date: createForm.period_end ? new Date(createForm.period_end).toISOString() : undefined,
+      limit: 200,
+    })
   } finally { loadingOrders.value = false }
 }
 
@@ -149,7 +155,10 @@ async function createSettlement() {
 
 function openCreate() {
   unsettledOrders.value = []
-  Object.assign(createForm, { period_start: null, period_end: null, hkd_rate: 0.9, order_ids: [], notes: '' })
+  const now = new Date()
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+  Object.assign(createForm, { period_start: periodStart, period_end: periodEnd, hkd_rate: 0.9, order_ids: [], notes: '' })
   createDialog.value = true
 }
 
