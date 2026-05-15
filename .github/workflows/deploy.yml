@@ -57,5 +57,6 @@ jobs:
             cd /opt/wemall-hk
             # 清理 Python 缓存并重启
             docker compose exec -T backend bash /app/reload.sh || true
-            docker compose restart backend nginx
+            # 重启所有服务（包括frontend）
+            docker compose restart backend frontend nginx
             echo "部署完成 $(date)"
