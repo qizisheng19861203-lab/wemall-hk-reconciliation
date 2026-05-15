@@ -173,7 +173,7 @@ async def import_supply_price(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """导入Excel更新供货价（支持商品ID或商品编码匹配）"""
+    """导入Excel更新供货价（优先使用商品编码匹配）"""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="只支持Excel文件(.xlsx, .xls)")
 
@@ -182,27 +182,30 @@ async def import_supply_price(
         df = pd.read_excel(io.BytesIO(contents))
 
         # 检查必需的列
-        required_cols = ['商品ID', '供货价']
-        if not all(col in df.columns for col in required_cols):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Excel必须包含以下列: {', '.join(required_cols)}"
-            )
+        if '供货价' not in df.columns:
+            raise HTTPException(status_code=400, detail="Excel必须包含'供货价'列")
+
+        if '商品编码' not in df.columns and '商品ID' not in df.columns:
+            raise HTTPException(status_code=400, detail="Excel必须包含'商品编码'或'商品ID'列")
 
         updated, not_found = 0, 0
         not_found_list = []
 
         for _, row in df.iterrows():
-            goods_id = str(row['商品ID']).strip()
             supply_price = float(row['供货价'])
+            product = None
 
-            # 先尝试用商品ID匹配
-            product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
-
-            # 如果没找到，尝试用商品编码匹配
-            if not product and '商品编码' in df.columns:
+            # 优先使用商品编码匹配（这是最准确的）
+            if '商品编码' in df.columns:
                 goods_code = str(row['商品编码']).strip()
-                product = db.query(Product).filter(Product.sku == goods_code).first()
+                if goods_code and goods_code != 'nan':
+                    product = db.query(Product).filter(Product.sku == goods_code).first()
+
+            # 如果商品编码没找到，尝试用商品ID匹配
+            if not product and '商品ID' in df.columns:
+                goods_id = str(row['商品ID']).strip()
+                if goods_id and goods_id != 'nan':
+                    product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
 
             if product:
                 product.supply_price = supply_price
@@ -210,7 +213,8 @@ async def import_supply_price(
             else:
                 not_found += 1
                 not_found_list.append({
-                    "goods_id": goods_id,
+                    "goods_code": row.get('商品编码', ''),
+                    "goods_id": row.get('商品ID', ''),
                     "title": row.get('商品标题', ''),
                 })
 
