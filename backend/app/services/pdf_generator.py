@@ -11,13 +11,13 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "static")
 env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 
-def _get_stamp_base64() -> str:
-    """读取公章图片并转为 base64 data URI"""
-    seal_path = os.path.join(STATIC_DIR, "seal.png")
+def _get_image_base64(filename: str, mime: str = "image/png") -> str:
+    """读取图片并转为 base64 data URI"""
+    path = os.path.join(STATIC_DIR, filename)
     try:
-        with open(seal_path, "rb") as f:
+        with open(path, "rb") as f:
             data = base64.b64encode(f.read()).decode()
-        return f"data:image/png;base64,{data}"
+        return f"data:{mime};base64,{data}"
     except Exception:
         return ""
 
@@ -36,7 +36,8 @@ def generate_invoice_pdf(settlement: Settlement) -> bytes:
     html = _render_html("invoice.html", {
         "settlement": settlement,
         "now": datetime.now(),
-        "stamp_src": _get_stamp_base64(),
+        "stamp_src": _get_image_base64("seal.png", "image/png"),
+        "logo_src": _get_image_base64("logo.jpg", "image/jpeg"),
     })
     return _html_to_pdf(html)
 
@@ -46,6 +47,6 @@ def generate_detail_pdf(settlement: Settlement, orders: List[Order]) -> bytes:
         "settlement": settlement,
         "orders": orders,
         "now": datetime.now(),
-        "stamp_src": _get_stamp_base64(),
+        "stamp_src": _get_image_base64("seal.png", "image/png"),
     })
     return _html_to_pdf(html)

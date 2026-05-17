@@ -6,7 +6,9 @@ node_modules/
 frontend/dist/
 *.log
 nginx/ssl/
-static/
+static/*
+!static/seal.png
+!static/logo.jpg
 .DS_Store
 
 # 部署时生成的版本文件

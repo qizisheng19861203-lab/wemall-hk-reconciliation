@@ -6,6 +6,7 @@ RUN printf 'Types: deb\nURIs: http://mirrors.tencent.com/debian\nSuites: trixie 
     apt-get update && apt-get install -y \
     libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
     libffi-dev libssl-dev \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
