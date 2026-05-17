@@ -49,44 +49,52 @@
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="orders" v-loading="loading" stripe>
-        <el-table-column prop="wemall_order_id" label="订单号" width="170" />
-        <el-table-column prop="order_date" label="下单日期" width="120"
-          :formatter="(r) => r.order_date?.slice(0,10)" />
-        <el-table-column label="商品" min-width="200">
+      <el-table :data="flatRows" v-loading="loading" stripe
+        :span-method="spanMethod" border>
+        <el-table-column prop="wemall_order_id" label="订单号" width="165" />
+        <el-table-column label="下单日期" width="100">
+          <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
+        </el-table-column>
+        <el-table-column label="商品名称" min-width="220">
           <template #default="{ row }">
-            <div v-for="item in row.items" :key="item.id" style="font-size:12px;line-height:1.6">
-              {{ item.product_name }} × {{ item.quantity }}
-              <span v-if="item.supply_price" style="color:#409EFF"> ¥{{ item.supply_price }}</span>
-              <el-tag v-else size="small" type="warning">待录价</el-tag>
-            </div>
+            <span style="font-size:12px">{{ row._item.product_name }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="供货小计" width="110" align="right">
+        <el-table-column label="数量" width="55" align="center">
+          <template #default="{ row }">{{ row._item.quantity }}</template>
+        </el-table-column>
+        <el-table-column label="供货单价(RMB)" width="120" align="right">
           <template #default="{ row }">
-            <span :class="{ 'text-red': row.is_refunded }">
-              ¥{{ row.items.reduce((s, i) => s + (i.supply_subtotal || 0), 0).toFixed(2) }}
+            <span v-if="row._item.supply_price" style="color:#409EFF">¥{{ Number(row._item.supply_price).toFixed(2) }}</span>
+            <el-tag v-else type="danger" size="small">待录价</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="供货小计(RMB)" width="120" align="right">
+          <template #default="{ row }">
+            <span v-if="row._item.supply_subtotal" :class="{ 'text-red': row.is_refunded }">
+              ¥{{ Number(row._item.supply_subtotal).toFixed(2) }}
             </span>
+            <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="发货状态" width="100" align="center">
+        <el-table-column label="发货状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType[row.shipping_status]" size="small">{{ statusLabel[row.shipping_status] }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="退款" width="100" align="center">
+        <el-table-column label="退款" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.is_refunded" type="danger" size="small">¥{{ row.refund_amount }}</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="结算" width="80" align="center">
+        <el-table-column label="结算" width="75" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.settlement_id" type="success" size="small">已结算</el-tag>
             <el-tag v-else type="info" size="small">未结算</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80" fixed="right" v-if="auth.isAdminOrOperator">
+        <el-table-column label="操作" width="70" fixed="right" v-if="auth.isAdminOrOperator">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
           </template>
@@ -131,7 +139,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { orders as ordersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -153,6 +161,27 @@ const filter = reactive({ dateRange: null, shipping_status: null, is_refunded: n
 
 const statusLabel = { pending: '待发货', shipped: '已发货', delivered: '已签收', returned: '已退货' }
 const statusType = { pending: 'warning', shipped: 'primary', delivered: 'success', returned: 'danger' }
+
+// 每个商品item展开为一行，订单字段合并显示
+const flatRows = computed(() => {
+  const rows = []
+  for (const order of orders.value) {
+    const items = order.items?.length ? order.items : [{ product_name: '(无商品)', quantity: 0, supply_price: null, supply_subtotal: null, id: 0 }]
+    items.forEach((item, idx) => {
+      rows.push({ ...order, _item: item, _itemIndex: idx, _itemCount: items.length })
+    })
+  }
+  return rows
+})
+
+// 订单号/日期/发货状态/退款/结算/操作列按订单合并
+const MERGE_COLS = [0, 1, 6, 7, 8, 9]
+function spanMethod({ rowIndex, columnIndex }) {
+  if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
+  const row = flatRows.value[rowIndex]
+  if (row._itemIndex === 0) return [row._itemCount, 1]
+  return [0, 0]
+}
 
 async function loadOrders() {
   loading.value = true
