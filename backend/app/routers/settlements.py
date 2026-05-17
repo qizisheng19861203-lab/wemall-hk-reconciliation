@@ -237,12 +237,14 @@ async def fetch_today_rate(db: Session = Depends(get_db), _: User = Depends(requ
 def auto_settle_period(
     period_start: Optional[str] = None,
     period_end: Optional[str] = None,
+    force: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
     """
     自动结算指定周期的未结算订单
     如果不传参数，则自动判断当前应该结算哪个周期
+    force=True 时，即使不是16号或1号也可以手动触发
     """
     from datetime import datetime, timezone
     import pytz
@@ -253,12 +255,20 @@ def auto_settle_period(
     # 如果没有指定周期，自动判断
     if not period_start or not period_end:
         today = now_beijing.date()
-        if today.day == 16:
-            # 16号凌晨，结算1-15号
+
+        # 如果不是16号或1号，且没有强制执行，则报错
+        if not force and today.day not in [1, 16]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"今天是{today.day}号，不是自动结算日期（16号或1号）。如需手动结算，请使用快速结算按钮。"
+            )
+
+        if today.day == 16 or (force and today.day > 15):
+            # 16号凌晨或手动触发时，结算1-15号
             period_start = datetime(today.year, today.month, 1, 0, 0, 0, tzinfo=beijing_tz)
             period_end = datetime(today.year, today.month, 15, 23, 59, 59, tzinfo=beijing_tz)
-        elif today.day == 1:
-            # 1号凌晨，结算上月16号-月底
+        elif today.day == 1 or (force and today.day <= 15):
+            # 1号凌晨或手动触发时，结算上月16号-月底
             last_month = today.month - 1 if today.month > 1 else 12
             last_year = today.year if today.month > 1 else today.year - 1
             from calendar import monthrange
@@ -266,7 +276,7 @@ def auto_settle_period(
             period_start = datetime(last_year, last_month, 16, 0, 0, 0, tzinfo=beijing_tz)
             period_end = datetime(last_year, last_month, last_day, 23, 59, 59, tzinfo=beijing_tz)
         else:
-            raise HTTPException(status_code=400, detail="今天不是自动结算日期（16号或1号）")
+            raise HTTPException(status_code=400, detail="无法确定结算周期")
     else:
         period_start = datetime.fromisoformat(period_start).replace(tzinfo=beijing_tz)
         period_end = datetime.fromisoformat(period_end).replace(tzinfo=beijing_tz)

@@ -321,13 +321,33 @@ async function deleteSettlement(id) {
   }
 }
 
-function downloadPdf(id, type) {
+async function downloadPdf(id, type) {
   const token = localStorage.getItem('token')
   const url = type === 'invoice' ? settlementsApi.invoiceUrl(id) : settlementsApi.detailUrl(id)
-  const a = document.createElement('a')
-  a.href = url + `?token=${token}`
-  a.target = '_blank'
-  a.click()
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+
+    const blob = await response.blob()
+    const downloadUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = `${type === 'invoice' ? 'invoice' : 'detail'}_${id}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(downloadUrl)
+  } catch (e) {
+    ElMessage.error(e.message || 'PDF下载失败')
+  }
 }
 
 async function sendNotify(id) {
