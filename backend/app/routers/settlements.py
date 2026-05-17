@@ -119,6 +119,27 @@ def confirm_settlement(
     return s
 
 
+@router.delete("/{settlement_id}")
+def delete_settlement(
+    settlement_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="结算单不存在")
+    if s.status == SettlementStatus.settled:
+        raise HTTPException(status_code=400, detail="已结清的结算单不能删除")
+
+    # 解除订单关联
+    db.query(Order).filter(Order.settlement_id == settlement_id).update({"settlement_id": None})
+
+    # 删除结算单
+    db.delete(s)
+    db.commit()
+    return {"message": "删除成功"}
+
+
 @router.get("/{settlement_id}/invoice.pdf")
 def download_invoice(
     settlement_id: int,

@@ -31,6 +31,7 @@ export const settlements = {
   list: (params) => http.get('/settlements', { params }),
   create: (data) => http.post('/settlements', data),
   confirm: (id, data) => http.post(`/settlements/${id}/confirm`, data),
+  delete: (id) => http.delete(`/settlements/${id}`),
   notify: (id) => http.post(`/settlements/${id}/notify`),
   autoSettle: (params) => http.post('/settlements/auto-settle', null, { params }),
   invoiceUrl: (id) => `/api/settlements/${id}/invoice.pdf`,

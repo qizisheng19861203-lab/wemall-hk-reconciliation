@@ -1,56 +1,80 @@
 <template>
   <div>
-    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
-      <div><h2>结算管理</h2></div>
-      <div style="display:flex;gap:8px" v-if="auth.isAdmin">
-        <el-button type="success" @click="quickSettle('first-half')">结算本月1-15号</el-button>
-        <el-button type="success" @click="quickSettle('second-half')">结算本月16-月底</el-button>
-        <el-button type="primary" @click="openCreate">自定义结算</el-button>
-        <el-button type="warning" @click="triggerAutoSettle">手动触发自动结算</el-button>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div><h2 style="font-size:24px;margin:0">结算管理</h2></div>
+      <div style="display:flex;gap:12px" v-if="auth.isAdmin">
+        <el-button type="success" size="large" @click="quickSettle('first-half')">
+          <span style="font-size:15px">结算本月1-15号</span>
+        </el-button>
+        <el-button type="success" size="large" @click="quickSettle('second-half')">
+          <span style="font-size:15px">结算本月16-月底</span>
+        </el-button>
+        <el-button type="primary" size="large" @click="openCreate">
+          <span style="font-size:15px">自定义结算</span>
+        </el-button>
+        <el-button type="warning" size="large" @click="triggerAutoSettle">
+          <span style="font-size:15px">手动触发自动结算</span>
+        </el-button>
       </div>
     </div>
 
     <!-- 未结算金额提示 -->
-    <el-card shadow="never" style="margin-bottom:16px;background:#fff7e6;border-color:#ffd591" v-if="unsettledAmount > 0">
+    <el-card shadow="never" style="margin-bottom:20px;background:#fff7e6;border-color:#ffd591" v-if="unsettledAmount > 0">
       <div style="display:flex;align-items:center;gap:16px">
         <div>
-          <div style="font-size:13px;color:#8c6d00;margin-bottom:4px">当前未结算金额</div>
-          <div style="font-size:28px;font-weight:700;color:#d46b08">¥{{ unsettledAmount.toFixed(2) }}</div>
+          <div style="font-size:14px;color:#8c6d00;margin-bottom:6px">当前未结算金额</div>
+          <div style="font-size:32px;font-weight:700;color:#d46b08">¥{{ unsettledAmount.toFixed(2) }}</div>
         </div>
-        <div style="color:#8c6d00;font-size:13px">
+        <div style="color:#8c6d00;font-size:14px">
           建议每月15号和月底各结算一次
         </div>
       </div>
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="settlements" v-loading="loading" stripe :row-class-name="tableRowClassName">
-        <el-table-column prop="invoice_number" label="Invoice号" width="160" />
-        <el-table-column label="账期" width="200">
-          <template #default="{ row }">{{ row.period_start?.slice(0,10) }} ~ {{ row.period_end?.slice(0,10) }}</template>
-        </el-table-column>
-        <el-table-column label="净供货额(RMB)" width="130" align="right">
-          <template #default="{ row }">¥{{ Number(row.net_supply_rmb).toFixed(2) }}</template>
-        </el-table-column>
-        <el-table-column label="汇率" width="100" align="center">
-          <template #default="{ row }">{{ row.hkd_rate }}</template>
-        </el-table-column>
-        <el-table-column label="应付(HKD)" width="120" align="right">
-          <template #default="{ row }"><strong>HK${{ Number(row.payment_amount_hkd).toFixed(2) }}</strong></template>
-        </el-table-column>
-        <el-table-column prop="order_count" label="订单数" width="80" align="center" />
-        <el-table-column label="状态" width="100" align="center">
+      <el-table :data="settlements" v-loading="loading" stripe :row-class-name="tableRowClassName" style="font-size:14px">
+        <el-table-column prop="invoice_number" label="Invoice号" width="180" />
+        <el-table-column label="账期" width="240">
           <template #default="{ row }">
-            <el-tag :type="statusType[row.status]" size="small">{{ statusLabel[row.status] }}</el-tag>
+            <span style="font-size:14px">{{ row.period_start?.slice(0,10) }} ~ {{ row.period_end?.slice(0,10) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="净供货额(RMB)" width="150" align="right">
           <template #default="{ row }">
-            <el-button size="small" link @click="downloadPdf(row.id, 'invoice')">Invoice</el-button>
-            <el-button size="small" link @click="downloadPdf(row.id, 'detail')">明细</el-button>
-            <el-button size="small" link type="warning" v-if="auth.isAdmin && row.status !== 'settled'"
-              @click="openConfirm(row)">确认收款</el-button>
-            <el-button size="small" link v-if="auth.isAdmin" @click="sendNotify(row.id)">发通知</el-button>
+            <span style="font-size:15px;font-weight:600">¥{{ Number(row.net_supply_rmb).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="汇率" width="100" align="center">
+          <template #default="{ row }">
+            <span style="font-size:14px">{{ row.hkd_rate }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="应付(HKD)" width="150" align="right">
+          <template #default="{ row }">
+            <strong style="font-size:16px;color:#409EFF">HK${{ Number(row.payment_amount_hkd).toFixed(2) }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column prop="order_count" label="订单数" width="90" align="center">
+          <template #default="{ row }">
+            <span style="font-size:14px">{{ row.order_count }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="statusType[row.status]" size="large">{{ statusLabel[row.status] }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="280" fixed="right">
+          <template #default="{ row }">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <el-button size="default" @click="downloadPdf(row.id, 'invoice')">Invoice</el-button>
+              <el-button size="default" @click="downloadPdf(row.id, 'detail')">明细</el-button>
+              <el-button size="default" type="warning" v-if="auth.isAdmin && row.status !== 'settled'"
+                @click="openConfirm(row)">确认收款</el-button>
+              <el-button size="default" type="danger" v-if="auth.isAdmin && row.status !== 'settled'"
+                @click="deleteSettlement(row.id)">删除</el-button>
+              <el-button size="default" v-if="auth.isAdmin" @click="sendNotify(row.id)">发通知</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -80,7 +104,7 @@
     <el-dialog v-model="confirmDialog" title="确认收款" width="420px">
       <el-form :model="confirmForm" label-width="110px">
         <el-form-item label="应付金额(HKD)">
-          <strong>HK${{ confirmingSettlement?.payment_amount_hkd }}</strong>
+          <strong style="font-size:18px">HK${{ confirmingSettlement?.payment_amount_hkd }}</strong>
         </el-form-item>
         <el-form-item label="实付金额(HKD)">
           <el-input-number v-model="confirmForm.actual_payment_hkd" :precision="2" :min="0" />
@@ -145,12 +169,12 @@ async function quickSettle(period) {
   let start, end, periodName
 
   if (period === 'first-half') {
-    // 本月1-15号
+    // 本月1-15号（北京时间）
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
     end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59)
     periodName = `${now.getFullYear()}年${now.getMonth() + 1}月1-15号`
   } else {
-    // 本月16-月底
+    // 本月16-月底（北京时间）
     start = new Date(now.getFullYear(), now.getMonth(), 16, 0, 0, 0)
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     end = new Date(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59)
@@ -163,12 +187,18 @@ async function quickSettle(period) {
     // 获取今日汇率
     const rate = await ratesApi.today()
 
+    // 转换为本地时间字符串（YYYY-MM-DD HH:mm:ss）
+    const formatLocalDateTime = (date) => {
+      const pad = n => String(n).padStart(2, '0')
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+    }
+
     // 获取该周期订单
     const orders = await ordersApi.list({
       unsettled_only: true,
       is_refunded: false,
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
+      start_date: formatLocalDateTime(start),
+      end_date: formatLocalDateTime(end),
       limit: 500,
     })
 
@@ -180,8 +210,8 @@ async function quickSettle(period) {
 
     creating.value = true
     await settlementsApi.create({
-      period_start: start.toISOString(),
-      period_end: end.toISOString(),
+      period_start: formatLocalDateTime(start),
+      period_end: formatLocalDateTime(end),
       hkd_rate: Number(rate.hkd_to_cny),
       order_ids: orderIds,
       notes: `快速结算 ${periodName}`,
@@ -273,6 +303,21 @@ async function confirmSettlement() {
     ElMessage.error(e.message)
   } finally {
     confirming.value = false
+  }
+}
+
+async function deleteSettlement(id) {
+  try {
+    await ElMessageBox.confirm('确认删除此结算单？删除后订单将恢复为未结算状态。', '警告', {
+      type: 'warning',
+      confirmButtonText: '确认删除',
+      cancelButtonText: '取消',
+    })
+    await settlementsApi.delete(id)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || '删除失败')
   }
 }
 

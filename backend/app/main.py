@@ -48,26 +48,29 @@ def health():
     import os
     import subprocess
     from datetime import datetime, timezone, timedelta
+    from pathlib import Path
     CST = timezone(timedelta(hours=8))
 
     # 优先读取构建时写入的版本信息
     build_number = None
     commit_sha = None
-    try:
-        build_file = os.path.join(os.path.dirname(__file__), '..', 'BUILD_NUMBER')
-        if os.path.exists(build_file):
-            with open(build_file) as f:
-                build_number = f.read().strip()
-    except Exception:
-        pass
+
+    # 查找 BUILD_NUMBER 文件（在 backend/ 目录下）
+    base_dir = Path(__file__).parent.parent  # backend/
+    build_file = base_dir / 'BUILD_NUMBER'
+    sha_file = base_dir / 'COMMIT_SHA'
 
     try:
-        sha_file = os.path.join(os.path.dirname(__file__), '..', 'COMMIT_SHA')
-        if os.path.exists(sha_file):
-            with open(sha_file) as f:
-                commit_sha = f.read().strip()[:7]  # 短格式
-    except Exception:
-        pass
+        if build_file.exists():
+            build_number = build_file.read_text().strip()
+    except Exception as e:
+        print(f"Failed to read BUILD_NUMBER: {e}")
+
+    try:
+        if sha_file.exists():
+            commit_sha = sha_file.read_text().strip()[:7]  # 短格式
+    except Exception as e:
+        print(f"Failed to read COMMIT_SHA: {e}")
 
     # 如果文件不存在，尝试从 git 获取
     if not commit_sha:
