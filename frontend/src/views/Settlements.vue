@@ -363,7 +363,7 @@ async function sendNotify(id) {
 async function triggerAutoSettle() {
   try {
     await ElMessageBox.confirm('手动触发自动结算任务？系统会根据今天的日期判断应该结算哪个周期。', '提示', { type: 'warning' })
-    const res = await settlementsApi.autoSettle()
+    const res = await settlementsApi.autoSettle({ force: true })
     ElMessage.success(res.message || '自动结算完成')
     load()
   } catch (e) {
