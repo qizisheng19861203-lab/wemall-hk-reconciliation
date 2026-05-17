@@ -2,11 +2,29 @@
   <div>
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
       <div><h2>结算管理</h2></div>
-      <el-button type="primary" @click="openCreate" v-if="auth.isAdmin">新建结算单</el-button>
+      <div style="display:flex;gap:8px" v-if="auth.isAdmin">
+        <el-button type="success" @click="quickSettle('first-half')">结算本月1-15号</el-button>
+        <el-button type="success" @click="quickSettle('second-half')">结算本月16-月底</el-button>
+        <el-button type="primary" @click="openCreate">自定义结算</el-button>
+        <el-button type="warning" @click="triggerAutoSettle">手动触发自动结算</el-button>
+      </div>
     </div>
 
+    <!-- 未结算金额提示 -->
+    <el-card shadow="never" style="margin-bottom:16px;background:#fff7e6;border-color:#ffd591" v-if="unsettledAmount > 0">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div>
+          <div style="font-size:13px;color:#8c6d00;margin-bottom:4px">当前未结算金额</div>
+          <div style="font-size:28px;font-weight:700;color:#d46b08">¥{{ unsettledAmount.toFixed(2) }}</div>
+        </div>
+        <div style="color:#8c6d00;font-size:13px">
+          建议每月15号和月底各结算一次
+        </div>
+      </div>
+    </el-card>
+
     <el-card shadow="never">
-      <el-table :data="settlements" v-loading="loading" stripe>
+      <el-table :data="settlements" v-loading="loading" stripe :row-class-name="tableRowClassName">
         <el-table-column prop="invoice_number" label="Invoice号" width="160" />
         <el-table-column label="账期" width="200">
           <template #default="{ row }">{{ row.period_start?.slice(0,10) }} ~ {{ row.period_end?.slice(0,10) }}</template>
@@ -38,31 +56,28 @@
       </el-table>
     </el-card>
 
-    <!-- 新建结算 -->
-    <el-dialog v-model="createDialog" title="新建结算单" width="600px">
+    <!-- 自定义结算 -->
+    <el-dialog v-model="createDialog" title="自定义结算单" width="600px">
       <el-alert type="info" :closable="false" style="margin-bottom:12px">
-        将选中的未结算订单生成一张结算单，请先在订单页面筛选确认范围
+        手动选择时间范围创建结算单，系统会自动计算该周期内的未结算订单
       </el-alert>
       <el-form :model="createForm" label-width="100px">
-        <el-form-item label="账期开始"><el-date-picker v-model="createForm.period_start" type="datetime" /></el-form-item>
-        <el-form-item label="账期结束"><el-date-picker v-model="createForm.period_end" type="datetime" /></el-form-item>
+        <el-form-item label="账期开始">
+          <el-date-picker v-model="createForm.period_start" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        </el-form-item>
+        <el-form-item label="账期结束">
+          <el-date-picker v-model="createForm.period_end" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        </el-form-item>
         <el-form-item label="汇率(HKD→RMB)">
           <el-input-number v-model="createForm.hkd_rate" :precision="4" :min="0.01" style="width:160px" />
           <el-button link @click="fetchTodayRate" style="margin-left:8px">获取今日汇率</el-button>
         </el-form-item>
-        <el-form-item label="选择订单">
-          <el-button @click="loadUnsettledOrders" :loading="loadingOrders">加载未结算订单</el-button>
-          <span style="margin-left:8px;color:#909399">已选 {{ createForm.order_ids.length }} 笔</span>
+        <el-form-item label="预览">
+          <el-button @click="previewOrders" :loading="previewing">查看该周期订单</el-button>
+          <span style="margin-left:8px;color:#909399" v-if="previewData">
+            共 {{ previewData.order_count }} 笔订单，合计 ¥{{ previewData.total_rmb.toFixed(2) }}
+          </span>
         </el-form-item>
-        <el-table v-if="unsettledOrders.length" :data="unsettledOrders" max-height="240"
-          @selection-change="(rows) => createForm.order_ids = rows.map(r => r.id)">
-          <el-table-column type="selection" width="44" />
-          <el-table-column prop="wemall_order_id" label="订单号" width="150" />
-          <el-table-column prop="order_date" label="日期" width="100" :formatter="r => r.order_date?.slice(0,10)" />
-          <el-table-column label="供货小计" align="right">
-            <template #default="{ row }">¥{{ row.items.reduce((s,i) => s+(i.supply_subtotal||0), 0).toFixed(2) }}</template>
-          </el-table-column>
-        </el-table>
         <el-form-item label="备注"><el-input v-model="createForm.notes" type="textarea" /></el-form-item>
       </el-form>
       <template #footer>
@@ -101,22 +116,40 @@ const settlements = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const confirming = ref(false)
-const loadingOrders = ref(false)
+const previewing = ref(false)
 const createDialog = ref(false)
 const confirmDialog = ref(false)
 const confirmingSettlement = ref(null)
-const unsettledOrders = ref([])
+const unsettledAmount = ref(0)
+const previewData = ref(null)
 
-const createForm = reactive({ period_start: null, period_end: null, hkd_rate: 0.9, order_ids: [], notes: '' })
+const createForm = reactive({ period_start: '', period_end: '', hkd_rate: 0.9, notes: '' })
 const confirmForm = reactive({ actual_payment_hkd: 0, notes: '' })
 
 const statusLabel = { pending: '待结算', notified: '已通知', settled: '已结清' }
 const statusType = { pending: 'warning', notified: 'primary', settled: 'success' }
 
+function tableRowClassName({ row }) {
+  return row.status === 'settled' ? 'settled-row' : ''
+}
+
 async function load() {
   loading.value = true
-  try { settlements.value = await settlementsApi.list() }
-  finally { loading.value = false }
+  try {
+    settlements.value = await settlementsApi.list()
+    await loadUnsettledAmount()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadUnsettledAmount() {
+  try {
+    const stats = await ordersApi.stats({ unsettled_only: true })
+    unsettledAmount.value = stats.unsettled_rmb || 0
+  } catch (e) {
+    console.error('Failed to load unsettled amount:', e)
+  }
 }
 
 async function fetchTodayRate() {
@@ -124,41 +157,141 @@ async function fetchTodayRate() {
     const rate = await ratesApi.today()
     createForm.hkd_rate = Number(rate.hkd_to_cny)
     ElMessage.success(`已填入今日汇率：1 HKD = ${rate.hkd_to_cny} CNY`)
-  } catch { ElMessage.warning('今日汇率未录入，请手动输入') }
+  } catch {
+    ElMessage.warning('今日汇率未录入，请手动输入')
+  }
 }
 
-async function loadUnsettledOrders() {
-  loadingOrders.value = true
+async function previewOrders() {
+  if (!createForm.period_start || !createForm.period_end) {
+    return ElMessage.warning('请先选择账期')
+  }
+  previewing.value = true
   try {
-    unsettledOrders.value = await ordersApi.list({
+    const orders = await ordersApi.list({
       unsettled_only: true,
       is_refunded: false,
-      start_date: createForm.period_start ? new Date(createForm.period_start).toISOString() : undefined,
-      end_date: createForm.period_end ? new Date(createForm.period_end).toISOString() : undefined,
-      limit: 200,
+      start_date: createForm.period_start,
+      end_date: createForm.period_end,
+      limit: 500,
     })
-  } finally { loadingOrders.value = false }
+    let total = 0
+    orders.forEach(o => {
+      o.items?.forEach(item => {
+        total += item.supply_subtotal || 0
+      })
+    })
+    previewData.value = { order_count: orders.length, total_rmb: total }
+    ElMessage.success(`找到 ${orders.length} 笔未结算订单`)
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function quickSettle(period) {
+  const now = new Date()
+  let start, end, periodName
+
+  if (period === 'first-half') {
+    // 本月1-15号
+    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
+    end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59)
+    periodName = `${now.getFullYear()}年${now.getMonth() + 1}月1-15号`
+  } else {
+    // 本月16-月底
+    start = new Date(now.getFullYear(), now.getMonth(), 16, 0, 0, 0)
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    end = new Date(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59)
+    periodName = `${now.getFullYear()}年${now.getMonth() + 1}月16-${lastDay}号`
+  }
+
+  try {
+    await ElMessageBox.confirm(`确认结算 ${periodName}？`, '提示', { type: 'warning' })
+
+    // 获取今日汇率
+    const rate = await ratesApi.today()
+
+    // 获取该周期订单
+    const orders = await ordersApi.list({
+      unsettled_only: true,
+      is_refunded: false,
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+      limit: 500,
+    })
+
+    if (!orders.length) {
+      return ElMessage.warning('该周期没有未结算订单')
+    }
+
+    const orderIds = orders.map(o => o.id)
+
+    creating.value = true
+    await settlementsApi.create({
+      period_start: start.toISOString(),
+      period_end: end.toISOString(),
+      hkd_rate: Number(rate.hkd_to_cny),
+      order_ids: orderIds,
+      notes: `快速结算 ${periodName}`,
+    })
+
+    ElMessage.success('结算单创建成功')
+    load()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || '操作失败')
+  } finally {
+    creating.value = false
+  }
 }
 
 async function createSettlement() {
-  if (!createForm.period_start || !createForm.period_end) return ElMessage.warning('请选择账期')
-  if (!createForm.order_ids.length) return ElMessage.warning('请选择订单')
+  if (!createForm.period_start || !createForm.period_end) {
+    return ElMessage.warning('请选择账期')
+  }
+
   creating.value = true
   try {
-    await settlementsApi.create({ ...createForm, period_start: new Date(createForm.period_start).toISOString(), period_end: new Date(createForm.period_end).toISOString() })
+    // 获取该周期订单
+    const orders = await ordersApi.list({
+      unsettled_only: true,
+      is_refunded: false,
+      start_date: createForm.period_start,
+      end_date: createForm.period_end,
+      limit: 500,
+    })
+
+    if (!orders.length) {
+      return ElMessage.warning('该周期没有未结算订单')
+    }
+
+    const orderIds = orders.map(o => o.id)
+
+    await settlementsApi.create({
+      ...createForm,
+      order_ids: orderIds,
+    })
+
     ElMessage.success('结算单创建成功')
     createDialog.value = false
     load()
-  } catch (e) { ElMessage.error(e.message) }
-  finally { creating.value = false }
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    creating.value = false
+  }
 }
 
 function openCreate() {
-  unsettledOrders.value = []
   const now = new Date()
-  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
-  Object.assign(createForm, { period_start: periodStart, period_end: periodEnd, hkd_rate: 0.9, order_ids: [], notes: '' })
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+  Object.assign(createForm, {
+    period_start: start.toISOString().slice(0, 19).replace('T', ' '),
+    period_end: end.toISOString().slice(0, 19).replace('T', ' '),
+    hkd_rate: 0.9,
+    notes: '',
+  })
+  previewData.value = null
   createDialog.value = true
 }
 
@@ -176,8 +309,11 @@ async function confirmSettlement() {
     ElMessage.success('已确认结清')
     confirmDialog.value = false
     load()
-  } catch (e) { ElMessage.error(e.message) }
-  finally { confirming.value = false }
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    confirming.value = false
+  }
 }
 
 function downloadPdf(id, type) {
@@ -194,8 +330,30 @@ async function sendNotify(id) {
     await ElMessageBox.confirm('确认发送结算通知短信？', '提示', { type: 'warning' })
     const res = await settlementsApi.notify(id)
     ElMessage.success(`通知发送成功：${res.success}/${res.total}`)
-  } catch (e) { if (e !== 'cancel') ElMessage.error(e.message) }
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message)
+  }
+}
+
+async function triggerAutoSettle() {
+  try {
+    await ElMessageBox.confirm('手动触发自动结算任务？系统会根据今天的日期判断应该结算哪个周期。', '提示', { type: 'warning' })
+    const res = await settlementsApi.autoSettle()
+    ElMessage.success(res.message || '自动结算完成')
+    load()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(e.message || '操作失败')
+  }
 }
 
 onMounted(load)
 </script>
+
+<style scoped>
+:deep(.settled-row) {
+  background-color: #f0f9ff !important;
+}
+:deep(.settled-row:hover > td) {
+  background-color: #e6f4ff !important;
+}
+</style>

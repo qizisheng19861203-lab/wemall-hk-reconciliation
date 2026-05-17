@@ -210,3 +210,98 @@ async def fetch_today_rate(db: Session = Depends(get_db), _: User = Depends(requ
     from app.services.exchange_rate_service import fetch_and_save_rate
     rate = await fetch_and_save_rate(db)
     return rate
+
+
+@router.post("/auto-settle")
+def auto_settle_period(
+    period_start: Optional[str] = None,
+    period_end: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """
+    自动结算指定周期的未结算订单
+    如果不传参数，则自动判断当前应该结算哪个周期
+    """
+    from datetime import datetime, timezone
+    import pytz
+
+    beijing_tz = pytz.timezone('Asia/Shanghai')
+    now_beijing = datetime.now(beijing_tz)
+
+    # 如果没有指定周期，自动判断
+    if not period_start or not period_end:
+        today = now_beijing.date()
+        if today.day == 16:
+            # 16号凌晨，结算1-15号
+            period_start = datetime(today.year, today.month, 1, 0, 0, 0, tzinfo=beijing_tz)
+            period_end = datetime(today.year, today.month, 15, 23, 59, 59, tzinfo=beijing_tz)
+        elif today.day == 1:
+            # 1号凌晨，结算上月16号-月底
+            last_month = today.month - 1 if today.month > 1 else 12
+            last_year = today.year if today.month > 1 else today.year - 1
+            from calendar import monthrange
+            last_day = monthrange(last_year, last_month)[1]
+            period_start = datetime(last_year, last_month, 16, 0, 0, 0, tzinfo=beijing_tz)
+            period_end = datetime(last_year, last_month, last_day, 23, 59, 59, tzinfo=beijing_tz)
+        else:
+            raise HTTPException(status_code=400, detail="今天不是自动结算日期（16号或1号）")
+    else:
+        period_start = datetime.fromisoformat(period_start).replace(tzinfo=beijing_tz)
+        period_end = datetime.fromisoformat(period_end).replace(tzinfo=beijing_tz)
+
+    # 查找该周期内的未结算订单
+    orders = db.query(Order).filter(
+        Order.order_date >= period_start,
+        Order.order_date <= period_end,
+        Order.settlement_id == None,
+        Order.is_refunded == False,
+    ).options(joinedload(Order.items)).all()
+
+    if not orders:
+        return {"message": "该周期没有未结算订单", "period_start": period_start.isoformat(), "period_end": period_end.isoformat()}
+
+    # 获取今日汇率
+    today = now_beijing.date()
+    rate_record = db.query(ExchangeRate).filter(ExchangeRate.date == today).first()
+    if not rate_record:
+        raise HTTPException(status_code=400, detail="今日汇率未录入，无法自动结算")
+
+    # 计算总金额
+    total_supply = Decimal(0)
+    for o in orders:
+        for item in o.items:
+            total_supply += item.supply_subtotal or 0
+
+    payment_hkd = (total_supply / rate_record.hkd_to_cny).quantize(Decimal("0.01"))
+
+    # 创建结算单
+    settlement = Settlement(
+        invoice_number=_make_invoice_number(),
+        period_start=period_start.replace(tzinfo=None),
+        period_end=period_end.replace(tzinfo=None),
+        total_supply_rmb=total_supply,
+        total_refund_rmb=Decimal(0),
+        net_supply_rmb=total_supply,
+        hkd_rate=rate_record.hkd_to_cny,
+        payment_amount_hkd=payment_hkd,
+        notes=f"自动结算 {period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')}",
+    )
+    db.add(settlement)
+    db.flush()
+
+    # 关联订单
+    for o in orders:
+        o.settlement_id = settlement.id
+
+    db.commit()
+    db.refresh(settlement)
+
+    return {
+        "message": "自动结算成功",
+        "settlement_id": settlement.id,
+        "invoice_number": settlement.invoice_number,
+        "order_count": len(orders),
+        "total_rmb": float(total_supply),
+        "payment_hkd": float(payment_hkd),
+    }

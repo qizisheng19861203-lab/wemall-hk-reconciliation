@@ -33,9 +33,10 @@
         <el-button-group>
           <el-button size="small" :type="quickMode==='month' ? 'primary' : ''" @click="setQuickRange('month')">本月</el-button>
           <el-button size="small" :type="quickMode==='lastMonth' ? 'primary' : ''" @click="setQuickRange('lastMonth')">上月</el-button>
-          <el-button size="small" :type="quickMode==='week' ? 'primary' : ''" @click="setQuickRange('week')">本周</el-button>
-          <el-button size="small" :type="quickMode==='lastWeek' ? 'primary' : ''" @click="setQuickRange('lastWeek')">上周</el-button>
-          <el-button size="small" :type="quickMode==='biweek' ? 'primary' : ''" @click="setQuickRange('biweek')">近两周</el-button>
+          <el-button size="small" :type="quickMode==='firstHalf' ? 'primary' : ''" @click="setQuickRange('firstHalf')">本月1-15号</el-button>
+          <el-button size="small" :type="quickMode==='secondHalf' ? 'primary' : ''" @click="setQuickRange('secondHalf')">本月16-月底</el-button>
+          <el-button size="small" :type="quickMode==='lastFirstHalf' ? 'primary' : ''" @click="setQuickRange('lastFirstHalf')">上月1-15号</el-button>
+          <el-button size="small" :type="quickMode==='lastSecondHalf' ? 'primary' : ''" @click="setQuickRange('lastSecondHalf')">上月16-月底</el-button>
         </el-button-group>
         <el-date-picker v-model="filter.monthPicker" type="month" placeholder="按月选择"
           style="width:140px" @change="onMonthPick" />
@@ -234,24 +235,39 @@ function setQuickRange(mode) {
   quickMode.value = mode
   const now = new Date()
   let start, end
+
   if (mode === 'month') {
     start = new Date(now.getFullYear(), now.getMonth(), 1)
     end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
   } else if (mode === 'lastMonth') {
     start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59)
-  } else if (mode === 'week') {
-    const day = now.getDay() || 7
-    start = new Date(now); start.setDate(now.getDate() - day + 1); start.setHours(0,0,0,0)
-    end = new Date(start); end.setDate(start.getDate() + 6); end.setHours(23,59,59,0)
-  } else if (mode === 'lastWeek') {
-    const day = now.getDay() || 7
-    end = new Date(now); end.setDate(now.getDate() - day); end.setHours(23,59,59,0)
-    start = new Date(end); start.setDate(end.getDate() - 6); start.setHours(0,0,0,0)
-  } else if (mode === 'biweek') {
-    start = new Date(now); start.setDate(now.getDate() - 13); start.setHours(0,0,0,0)
-    end = new Date(now); end.setHours(23,59,59,0)
+  } else if (mode === 'firstHalf') {
+    // 本月1-15号
+    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
+    end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59)
+  } else if (mode === 'secondHalf') {
+    // 本月16-月底
+    start = new Date(now.getFullYear(), now.getMonth(), 16, 0, 0, 0)
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    end = new Date(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59)
+  } else if (mode === 'lastFirstHalf') {
+    // 上月1-15号
+    const lastMonth = now.getMonth() - 1
+    const lastYear = lastMonth < 0 ? now.getFullYear() - 1 : now.getFullYear()
+    const month = lastMonth < 0 ? 11 : lastMonth
+    start = new Date(lastYear, month, 1, 0, 0, 0)
+    end = new Date(lastYear, month, 15, 23, 59, 59)
+  } else if (mode === 'lastSecondHalf') {
+    // 上月16-月底
+    const lastMonth = now.getMonth() - 1
+    const lastYear = lastMonth < 0 ? now.getFullYear() - 1 : now.getFullYear()
+    const month = lastMonth < 0 ? 11 : lastMonth
+    const lastDay = new Date(lastYear, month + 1, 0).getDate()
+    start = new Date(lastYear, month, 16, 0, 0, 0)
+    end = new Date(lastYear, month, lastDay, 23, 59, 59)
   }
+
   filter.dateRange = [toLocalISO(start), toLocalISO(end)]
   filter.monthPicker = null
   page.value = 1
@@ -331,6 +347,11 @@ async function loadStats() {
   } finally {
     statsLoading.value = false
   }
+}
+
+async function refreshStats() {
+  await loadStats()
+  await loadOrders()
 }
 
 function doSearch() {

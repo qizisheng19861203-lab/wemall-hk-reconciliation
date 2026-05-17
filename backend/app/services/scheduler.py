@@ -4,9 +4,10 @@ from app.database import SessionLocal
 from app.services.exchange_rate_service import fetch_and_save_rate
 from app.services.order_sync import sync_orders
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(timezone=pytz.timezone('Asia/Shanghai'))
 
 
 async def _daily_exchange_rate():
@@ -31,13 +32,36 @@ async def _daily_order_sync():
         db.close()
 
 
+def _auto_settle():
+    """自动结算任务（同步函数）"""
+    from app.routers.settlements import auto_settle_period
+    from app.core.deps import get_db
+
+    db = SessionLocal()
+    try:
+        # 创建一个临时的管理员用户对象（绕过权限检查）
+        from app.models.user import User, UserRole
+        admin_user = User(id=0, username="system", role=UserRole.admin)
+
+        result = auto_settle_period(db=db, _=admin_user)
+        logger.info(f"Auto settlement completed: {result}")
+    except Exception as e:
+        logger.error(f"Auto settlement failed: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
-    # 每天早上9点更新汇率
+    # 每天早上9点更新汇率（北京时间）
     scheduler.add_job(_daily_exchange_rate, CronTrigger(hour=9, minute=0), id="daily_rate")
     # 每10分钟同步一次订单
     scheduler.add_job(_daily_order_sync, CronTrigger(minute='*/10'), id="order_sync")
+    # 每月16号凌晨0点0分0秒自动结算1-15号（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=0, minute=0, second=0), id="auto_settle_first_half")
+    # 每月1号凌晨0点0分0秒自动结算上月16号-月底（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=1, hour=0, minute=0, second=0), id="auto_settle_second_half")
     scheduler.start()
-    logger.info("Scheduler started")
+    logger.info("Scheduler started with Beijing timezone (CST)")
 
 
 def stop_scheduler():
