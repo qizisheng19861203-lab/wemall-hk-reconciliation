@@ -2,7 +2,7 @@
   <div>
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div><h2 style="font-size:24px;margin:0">结算管理</h2></div>
-      <div style="display:flex;gap:12px" v-if="auth.isAdmin">
+      <div style="display:flex;gap:12px;flex-wrap:wrap" v-if="auth.isAdmin">
         <el-button type="success" size="large" @click="quickSettle('first-half')">
           <span style="font-size:15px">结算本月1-15号</span>
         </el-button>
@@ -25,26 +25,59 @@
           <div style="font-size:14px;color:#8c6d00;margin-bottom:6px">当前未结算金额</div>
           <div style="font-size:32px;font-weight:700;color:#d46b08">¥{{ unsettledAmount.toFixed(2) }}</div>
         </div>
-        <div style="color:#8c6d00;font-size:14px">
-          建议每月15号和月底各结算一次
-        </div>
+        <div style="color:#8c6d00;font-size:14px">建议每月15号和月底各结算一次</div>
       </div>
     </el-card>
 
     <el-card shadow="never">
-      <!-- 批量下载工具栏 -->
-      <div v-if="selectedIds.length > 0" style="display:flex;align-items:center;gap:12px;padding:10px 0 14px;border-bottom:1px solid #f0f0f0;margin-bottom:12px">
-        <span style="color:#606266;font-size:14px">已选 <strong style="color:#409EFF">{{ selectedIds.length }}</strong> 条</span>
-        <el-button type="primary" size="default" @click="batchDownload('invoice')" :loading="batchLoading.invoice">
-          <el-icon style="margin-right:5px"><Download /></el-icon>
-          批量下载 Invoice ({{ selectedIds.length }})
-        </el-button>
-        <el-button type="success" size="default" @click="batchDownload('detail')" :loading="batchLoading.detail">
-          <el-icon style="margin-right:5px"><Download /></el-icon>
-          批量下载明细 ({{ selectedIds.length }})
-        </el-button>
-        <el-button size="small" text @click="selectedIds = []">清除选择</el-button>
+      <!-- 工具栏：年度下载 + 批量操作 -->
+      <div style="display:flex;align-items:center;gap:16px;padding:0 0 14px;border-bottom:1px solid #f0f0f0;margin-bottom:12px;flex-wrap:wrap">
+        <!-- 年度一键下载 -->
+        <div style="display:flex;align-items:center;gap:8px">
+          <el-select v-model="selectedYear" style="width:110px" size="default">
+            <el-option v-for="y in availableYears" :key="y" :label="`${y}年`" :value="y" />
+          </el-select>
+          <el-button type="primary" plain size="default" @click="yearDownload('invoice')" :loading="yearLoading.invoice">
+            <el-icon style="margin-right:4px"><Download /></el-icon>
+            下载全年Invoice
+          </el-button>
+          <el-button type="success" plain size="default" @click="yearDownload('detail')" :loading="yearLoading.detail">
+            <el-icon style="margin-right:4px"><Download /></el-icon>
+            下载全年明细
+          </el-button>
+        </div>
+
+        <!-- 分隔线 -->
+        <div v-if="selectedIds.length > 0" style="height:28px;width:1px;background:#dcdfe6"></div>
+
+        <!-- 批量选择操作 -->
+        <div v-if="selectedIds.length > 0" style="display:flex;align-items:center;gap:8px">
+          <span style="color:#606266;font-size:14px">已选 <strong style="color:#409EFF">{{ selectedIds.length }}</strong> 条</span>
+          <el-button type="primary" size="default" @click="batchDownload('invoice')" :loading="batchLoading.invoice">
+            <el-icon style="margin-right:4px"><Download /></el-icon>
+            批量Invoice ({{ selectedIds.length }})
+          </el-button>
+          <el-button type="success" size="default" @click="batchDownload('detail')" :loading="batchLoading.detail">
+            <el-icon style="margin-right:4px"><Download /></el-icon>
+            批量明细 ({{ selectedIds.length }})
+          </el-button>
+          <el-button size="small" text @click="selectedIds = []">清除</el-button>
+        </div>
       </div>
+
+      <!-- 下载进度提示 -->
+      <el-alert
+        v-if="downloadProgress.show"
+        :title="downloadProgress.text"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom:12px"
+      >
+        <template #default>
+          <el-progress :percentage="downloadProgress.pct" :striped="true" :striped-flow="true" :duration="6" />
+        </template>
+      </el-alert>
 
       <el-table
         :data="settlements"
@@ -86,32 +119,46 @@
             <el-tag :type="statusType[row.status]" size="large">{{ statusLabel[row.status] }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="320" fixed="right">
+        <el-table-column label="操作" min-width="380" fixed="right">
           <template #default="{ row }">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <!-- Invoice 下载按钮 - 醒目蓝色 + PDF图标 -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <!-- Invoice 下载 -->
               <el-button
                 size="default" type="primary"
                 @click="downloadPdf(row, 'invoice')"
+                :loading="downloadingId === `${row.id}-invoice`"
                 style="font-weight:600;letter-spacing:0.3px"
               >
-                <el-icon style="margin-right:4px"><Document /></el-icon>
+                <el-icon v-if="downloadingId !== `${row.id}-invoice`" style="margin-right:4px"><Document /></el-icon>
                 Invoice账单
               </el-button>
-              <!-- 明细下载按钮 - 绿色 + PDF图标 -->
+              <!-- 明细 PDF -->
               <el-button
                 size="default" type="success"
                 @click="downloadPdf(row, 'detail')"
+                :loading="downloadingId === `${row.id}-detail`"
                 style="font-weight:600"
               >
-                <el-icon style="margin-right:4px"><Tickets /></el-icon>
+                <el-icon v-if="downloadingId !== `${row.id}-detail`" style="margin-right:4px"><Tickets /></el-icon>
                 明细PDF
               </el-button>
               <el-button size="default" type="warning" v-if="auth.isAdmin && row.status !== 'settled'"
                 @click="openConfirm(row)">确认收款</el-button>
-              <el-button size="default" type="danger" v-if="auth.isAdmin && row.status !== 'settled'"
+              <!-- 短信通知按钮 -->
+              <el-button
+                v-if="auth.isAdmin"
+                size="default"
+                type="info"
+                plain
+                @click="sendNotify(row.id)"
+                :loading="notifyingId === row.id"
+                style="border-color:#67c23a;color:#67c23a;background:#f0f9eb"
+              >
+                <el-icon v-if="notifyingId !== row.id" style="margin-right:4px"><Bell /></el-icon>
+                发通知
+              </el-button>
+              <el-button size="default" type="danger" plain v-if="auth.isAdmin && row.status !== 'settled'"
                 @click="deleteSettlement(row.id)">删除</el-button>
-              <el-button size="default" v-if="auth.isAdmin" @click="sendNotify(row.id)">发通知</el-button>
             </div>
           </template>
         </el-table-column>
@@ -158,9 +205,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Tickets, Download } from '@element-plus/icons-vue'
+import { Document, Tickets, Download, Bell } from '@element-plus/icons-vue'
 import { settlements as settlementsApi, orders as ordersApi, rates as ratesApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -175,6 +222,25 @@ const confirmingSettlement = ref(null)
 const unsettledAmount = ref(0)
 const selectedIds = ref([])
 const batchLoading = reactive({ invoice: false, detail: false })
+const yearLoading = reactive({ invoice: false, detail: false })
+const downloadingId = ref('')   // 单个下载时记录 `${id}-${type}`
+const notifyingId = ref(null)   // 发短信时记录 id
+
+// 年度下载
+const currentYear = new Date().getFullYear()
+const selectedYear = ref(currentYear)
+const availableYears = computed(() => {
+  const years = new Set()
+  settlements.value.forEach(s => {
+    if (s.period_end) years.add(parseInt(s.period_end.slice(0, 4)))
+  })
+  // 确保当年和前两年都在列表中
+  for (let y = currentYear - 2; y <= currentYear; y++) years.add(y)
+  return [...years].sort((a, b) => b - a)
+})
+
+// 下载进度
+const downloadProgress = reactive({ show: false, text: '', pct: 0 })
 
 const createForm = reactive({ period_start: '', period_end: '', notes: '' })
 const confirmForm = reactive({ actual_payment_hkd: 0, notes: '' })
@@ -210,12 +276,10 @@ async function quickSettle(period) {
   let start, end, periodName
 
   if (period === 'first-half') {
-    // 本月1-15号（北京时间）
     start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
     end = new Date(now.getFullYear(), now.getMonth(), 15, 23, 59, 59)
     periodName = `${now.getFullYear()}年${now.getMonth() + 1}月1-15号`
   } else {
-    // 本月16-月底（北京时间）
     start = new Date(now.getFullYear(), now.getMonth(), 16, 0, 0, 0)
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     end = new Date(now.getFullYear(), now.getMonth(), lastDay, 23, 59, 59)
@@ -224,40 +288,22 @@ async function quickSettle(period) {
 
   try {
     await ElMessageBox.confirm(`确认结算 ${periodName}？`, '提示', { type: 'warning' })
-
-    // 获取今日汇率
     const rate = await ratesApi.today()
-
-    // 转换为本地时间字符串（YYYY-MM-DD HH:mm:ss）
     const formatLocalDateTime = (date) => {
       const pad = n => String(n).padStart(2, '0')
       return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
     }
-
-    // 获取该周期订单
     const orders = await ordersApi.list({
-      unsettled_only: true,
-      is_refunded: false,
-      start_date: formatLocalDateTime(start),
-      end_date: formatLocalDateTime(end),
-      limit: 500,
+      unsettled_only: true, is_refunded: false,
+      start_date: formatLocalDateTime(start), end_date: formatLocalDateTime(end), limit: 500,
     })
-
-    if (!orders.length) {
-      return ElMessage.warning('该周期没有未结算订单')
-    }
-
-    const orderIds = orders.map(o => o.id)
-
+    if (!orders.length) return ElMessage.warning('该周期没有未结算订单')
     creating.value = true
     await settlementsApi.create({
-      period_start: formatLocalDateTime(start),
-      period_end: formatLocalDateTime(end),
-      hkd_rate: Number(rate.hkd_to_cny),
-      order_ids: orderIds,
+      period_start: formatLocalDateTime(start), period_end: formatLocalDateTime(end),
+      hkd_rate: Number(rate.hkd_to_cny), order_ids: orders.map(o => o.id),
       notes: `快速结算 ${periodName}`,
     })
-
     ElMessage.success('结算单创建成功')
     load()
   } catch (e) {
@@ -268,42 +314,22 @@ async function quickSettle(period) {
 }
 
 async function createSettlement() {
-  if (!createForm.period_start || !createForm.period_end) {
-    return ElMessage.warning('请选择账期')
-  }
-
+  if (!createForm.period_start || !createForm.period_end) return ElMessage.warning('请选择账期')
   creating.value = true
   try {
-    // 获取今日汇率
     const rate = await ratesApi.today()
-
-    // 构造完整的日期时间（开始日期 00:00:00，结束日期 23:59:59）
     const startDateTime = `${createForm.period_start} 00:00:00`
     const endDateTime = `${createForm.period_end} 23:59:59`
-
-    // 获取该周期订单
     const orders = await ordersApi.list({
-      unsettled_only: true,
-      is_refunded: false,
-      start_date: startDateTime,
-      end_date: endDateTime,
-      limit: 500,
+      unsettled_only: true, is_refunded: false,
+      start_date: startDateTime, end_date: endDateTime, limit: 500,
     })
-
-    if (!orders.length) {
-      return ElMessage.warning('该周期没有未结算订单')
-    }
-
-    const orderIds = orders.map(o => o.id)
-
+    if (!orders.length) return ElMessage.warning('该周期没有未结算订单')
     await settlementsApi.create({
-      period_start: startDateTime,
-      period_end: endDateTime,
-      hkd_rate: Number(rate.hkd_to_cny),
-      order_ids: orderIds,
+      period_start: startDateTime, period_end: endDateTime,
+      hkd_rate: Number(rate.hkd_to_cny), order_ids: orders.map(o => o.id),
       notes: createForm.notes || `自定义结算 ${createForm.period_start} ~ ${createForm.period_end}`,
     })
-
     ElMessage.success('结算单创建成功')
     createDialog.value = false
     load()
@@ -350,9 +376,7 @@ async function confirmSettlement() {
 async function deleteSettlement(id) {
   try {
     await ElMessageBox.confirm('确认删除此结算单？删除后订单将恢复为未结算状态。', '警告', {
-      type: 'warning',
-      confirmButtonText: '确认删除',
-      cancelButtonText: '取消',
+      type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消',
     })
     await settlementsApi.delete(id)
     ElMessage.success('删除成功')
@@ -362,19 +386,35 @@ async function deleteSettlement(id) {
   }
 }
 
-// 格式化文件名日期：取账期结束日 YYYYMMDD
 function fmtDate(dateStr) {
   return dateStr ? dateStr.slice(0, 10).replace(/-/g, '') : ''
 }
 
+// 显示下载进度条
+function showProgress(text) {
+  downloadProgress.show = true
+  downloadProgress.text = text
+  downloadProgress.pct = 30
+  // 模拟进度
+  setTimeout(() => { if (downloadProgress.show) downloadProgress.pct = 60 }, 600)
+  setTimeout(() => { if (downloadProgress.show) downloadProgress.pct = 85 }, 1500)
+}
+function hideProgress() {
+  downloadProgress.pct = 100
+  setTimeout(() => { downloadProgress.show = false; downloadProgress.pct = 0 }, 500)
+}
+
 async function downloadPdf(row, type) {
+  const key = `${row.id}-${type}`
+  if (downloadingId.value === key) return
+  downloadingId.value = key
+  showProgress(`正在生成 ${type === 'invoice' ? 'Invoice账单' : '明细PDF'}...`)
   const token = localStorage.getItem('token')
   const url = type === 'invoice' ? settlementsApi.invoiceUrl(row.id) : settlementsApi.detailUrl(row.id)
   const date = fmtDate(row.period_end)
   const filename = type === 'invoice'
     ? `Invoice#${row.invoice_number}+香港蔚蓝+${date}.pdf`
     : `OrderDetail+香港蔚蓝+${date}.pdf`
-
   try {
     const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
     if (!response.ok) throw new Error('下载失败')
@@ -386,8 +426,12 @@ async function downloadPdf(row, type) {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(a.href)
+    hideProgress()
   } catch (e) {
+    hideProgress()
     ElMessage.error(e.message || 'PDF下载失败')
+  } finally {
+    downloadingId.value = ''
   }
 }
 
@@ -402,8 +446,8 @@ async function batchDownload(type) {
     ? settlementsApi.batchInvoiceUrl(selectedIds.value)
     : settlementsApi.batchDetailUrl(selectedIds.value)
   const filename = type === 'invoice' ? 'Invoices+香港蔚蓝.zip' : 'OrderDetails+香港蔚蓝.zip'
-
   batchLoading[type] = true
+  showProgress(`正在打包 ${selectedIds.value.length} 个PDF...`)
   try {
     const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
     if (!response.ok) throw new Error('批量下载失败')
@@ -415,21 +459,58 @@ async function batchDownload(type) {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(a.href)
+    hideProgress()
     ElMessage.success(`已下载 ${selectedIds.value.length} 个PDF`)
   } catch (e) {
+    hideProgress()
     ElMessage.error(e.message || '批量下载失败')
   } finally {
     batchLoading[type] = false
   }
 }
 
+async function yearDownload(type) {
+  const year = selectedYear.value
+  const token = localStorage.getItem('token')
+  const url = type === 'invoice'
+    ? settlementsApi.yearInvoiceUrl(year)
+    : settlementsApi.yearDetailUrl(year)
+  const filename = type === 'invoice'
+    ? `Invoices+香港蔚蓝+${year}年.zip`
+    : `OrderDetails+香港蔚蓝+${year}年.zip`
+  yearLoading[type] = true
+  showProgress(`正在打包 ${year} 年全部${type === 'invoice' ? 'Invoice' : '明细'}...`)
+  try {
+    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    if (!response.ok) throw new Error('下载失败')
+    const blob = await response.blob()
+    const a = document.createElement('a')
+    a.href = window.URL.createObjectURL(blob)
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(a.href)
+    hideProgress()
+    ElMessage.success(`${year} 年全部PDF已下载`)
+  } catch (e) {
+    hideProgress()
+    ElMessage.error(e.message || '年度下载失败')
+  } finally {
+    yearLoading[type] = false
+  }
+}
+
 async function sendNotify(id) {
   try {
     await ElMessageBox.confirm('确认发送结算通知短信？', '提示', { type: 'warning' })
+    notifyingId.value = id
     const res = await settlementsApi.notify(id)
     ElMessage.success(`通知发送成功：${res.success}/${res.total}`)
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error(e.message)
+    if (e !== 'cancel') ElMessage.error(e.message || '发送失败')
+  } finally {
+    notifyingId.value = null
   }
 }
 

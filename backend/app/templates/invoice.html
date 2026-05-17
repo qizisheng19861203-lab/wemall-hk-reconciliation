@@ -3,54 +3,60 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: A4; margin: 2cm 2cm 2.5cm 2cm; }
+  @page { size: A4; margin: 1.2cm 1.5cm 1.5cm 1.5cm; }
   body {
     font-family: "Noto Sans CJK SC", "WenQuanYi Zen Hei", "Source Han Sans CN",
                  "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
-    font-size: 12px; color: #333; line-height: 1.5;
+    font-size: 11px; color: #333; line-height: 1.4;
   }
 
   /* 顶部 */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
-  .company-info { line-height: 1.7; font-size: 12px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .company-info { line-height: 1.6; font-size: 11px; }
 
-  /* 标题行 */
-  .title-section { display: flex; justify-content: space-between; align-items: flex-end;
-                   border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-  .title-section h1 { margin: 0 0 5px 0; font-size: 28px; font-weight: bold; letter-spacing: 2px; }
-  .title-section .inv-no { margin: 0; font-size: 12px; }
-  .title-section .inv-date { text-align: right; font-size: 12px; line-height: 2; }
-
-  /* 开单给 */
-  .address-section { margin-bottom: 20px; }
-  .address-block { line-height: 1.8; font-size: 12px; }
-
-  /* 明细表格 */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
-  table th, table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-  table th { background-color: #f9f9f9; font-weight: 600; }
-
-  /* 底部：付款方式 + 合计 + 公章 */
-  .bottom-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 60px; }
-  .payment-mode-box { border: 1px solid #ddd; padding: 15px; width: 38%; border-radius: 5px; line-height: 1.8; font-size: 11px; }
-  .totals-area { width: 42%; position: relative; font-size: 12px; }
-  .total-line { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; }
-  .grand-total { display: flex; justify-content: space-between; padding: 10px 0;
-                 font-weight: bold; border-top: 2px solid #333; margin-top: 4px; font-size: 13px; }
-  .stamp-img {
-    position: absolute;
-    right: 60px;
-    bottom: -70px;
-    width: 150px;
+  /* 公章固定底部 */
+  .stamp-fixed {
+    position: fixed;
+    bottom: 0.6cm;
+    right: 1.5cm;
+    width: 120px;
     opacity: 0.88;
     mix-blend-mode: multiply;
   }
 
+  /* 标题行 */
+  .title-section { display: flex; justify-content: space-between; align-items: flex-end;
+                   border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 14px; }
+  .title-section h1 { margin: 0 0 4px 0; font-size: 26px; font-weight: bold; letter-spacing: 2px; }
+  .title-section .inv-no { margin: 0; font-size: 11px; }
+  .title-section .inv-date { text-align: right; font-size: 11px; line-height: 1.9; }
+
+  /* 开单给 */
+  .address-section { margin-bottom: 14px; }
+  .address-block { line-height: 1.7; font-size: 11px; }
+
+  /* 明细表格 */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 11px; }
+  table th, table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #ddd; }
+  table th { background-color: #f9f9f9; font-weight: 600; }
+
+  /* 底部：付款方式 + 合计 */
+  .bottom-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .payment-mode-box { border: 1px solid #ddd; padding: 12px 14px; width: 38%; border-radius: 5px; line-height: 1.7; font-size: 11px; }
+  .totals-area { width: 42%; font-size: 11px; }
+  .total-line { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
+  .grand-total { display: flex; justify-content: space-between; padding: 8px 0;
+                 font-weight: bold; border-top: 2px solid #333; margin-top: 3px; font-size: 12px; }
+
   /* 付款资料 */
-  .payment-details { line-height: 1.9; margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; font-size: 12px; }
+  .payment-details { line-height: 1.8; padding-top: 14px; border-top: 1px solid #eee; font-size: 11px; }
 </style>
 </head>
 <body>
+
+{% if stamp_src %}
+<img src="{{ stamp_src }}" class="stamp-fixed" alt="公章" />
+{% endif %}
 
 <!-- 顶部：公司信息 + Logo -->
 <div class="header">
@@ -58,17 +64,16 @@
     <strong>HONGKONG BLUE HEALTH MANAGEMENT LIMITED</strong><br>
     香港蔚藍健康管理有限公司<br>
     No.963 9/F., GOOD HOPE BUILDING,<br>
-    618 NATHAN ROAD, KOWLOON,<br>
-    Hong Kong
+    618 NATHAN ROAD, KOWLOON, Hong Kong
   </div>
   {% if logo_src %}
-  <div style="text-align:right;">
-    <img src="{{ logo_src }}" alt="Blue Medicine Logo" style="width:185px; height:auto;" />
+  <div>
+    <img src="{{ logo_src }}" alt="Blue Medicine Logo" style="width:140px; height:auto;" />
   </div>
   {% endif %}
 </div>
 
-<!-- 标题行：INVOICE + Invoice No. + 日期 -->
+<!-- 标题行 -->
 <div class="title-section">
   <div>
     <h1>INVOICE</h1>
@@ -85,10 +90,7 @@
     <strong>Bill To / 开单给</strong><br>
     <span style="color:#0066cc;"><strong>Purecise (Hong Kong) Health Management Limited</strong></span><br>
     <span style="color:#0066cc;">倍賽思（香港）健康管理有限公司</span><br>
-    UNIT 1021, BEVERLEY COMMERCIAL CENTRE,<br>
-    87-105 CHATHAM ROAD SOUTH,<br>
-    TSIM SHA TSUI, KOWLOON,<br>
-    HONG KONG
+    UNIT 1021, BEVERLEY COMMERCIAL CENTRE, 87-105 CHATHAM ROAD SOUTH, TSIM SHA TSUI, KOWLOON, HONG KONG
   </div>
 </div>
 
@@ -114,10 +116,10 @@
   </tbody>
 </table>
 
-<!-- 付款方式 + 合计 + 公章 -->
+<!-- 付款方式 + 合计 -->
 <div class="bottom-section">
   <div class="payment-mode-box">
-    <p style="margin:0 0 8px 0; font-weight:bold;">Payment Mode / 付款方式</p>
+    <p style="margin:0 0 6px 0; font-weight:bold;">Payment Mode / 付款方式</p>
     <div style="display:flex; justify-content:space-between;">
       <span>方式</span>
       <span>汇丰银行转账（HSBC Transfer）</span>
@@ -137,9 +139,6 @@
       <span>合计 Total</span>
       <span>RMB ¥ {{ "%.2f"|format(settlement.net_supply_rmb) }}</span>
     </div>
-    {% if stamp_src %}
-    <img src="{{ stamp_src }}" alt="Company Stamp" class="stamp-img" />
-    {% endif %}
   </div>
 </div>
 

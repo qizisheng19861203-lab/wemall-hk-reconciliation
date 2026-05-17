@@ -8,6 +8,7 @@ from app.routers.products import router as products_router
 from app.routers.orders import router as orders_router
 from app.routers.settlements import router as settlements_router, rates_router
 from app.routers.reports import router as reports_router
+from app.routers.notification_contacts import router as contacts_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 import app.models  # ensure all models are imported for table creation
 
@@ -41,6 +42,7 @@ app.include_router(orders_router, prefix="/api")
 app.include_router(settlements_router, prefix="/api")
 app.include_router(rates_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
+app.include_router(contacts_router, prefix="/api")
 
 
 @app.get("/health")

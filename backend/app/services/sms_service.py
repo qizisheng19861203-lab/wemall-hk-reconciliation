@@ -2,12 +2,19 @@ from tencentcloud.common import credential
 from tencentcloud.sms.v20210111 import sms_client, models
 from app.config import settings
 from app.models.settlement import Settlement, SettlementNotification
+from app.models.notification_contact import NotificationContact
 from sqlalchemy.orm import Session
 import json
 
 
 async def send_settlement_notification(db: Session, settlement: Settlement) -> dict:
-    phones = [p.strip() for p in settings.SETTLEMENT_NOTIFY_PHONE.split(",") if p.strip()]
+    # 优先从数据库查询启用的联系人
+    db_contacts = db.query(NotificationContact).filter(NotificationContact.is_active == True).all()
+    if db_contacts:
+        phones = [c.phone.strip() for c in db_contacts if c.phone.strip()]
+    else:
+        # fallback 到配置文件中的手机号
+        phones = [p.strip() for p in settings.SETTLEMENT_NOTIFY_PHONE.split(",") if p.strip()]
     if not phones:
         return {"status": "skipped", "reason": "no phone configured"}
 

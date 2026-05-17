@@ -38,6 +38,15 @@ export const settlements = {
   detailUrl: (id) => `/api/settlements/${id}/detail.pdf`,
   batchInvoiceUrl: (ids) => `/api/settlements/batch-invoice.zip?ids=${ids.join(',')}`,
   batchDetailUrl: (ids) => `/api/settlements/batch-detail.zip?ids=${ids.join(',')}`,
+  yearInvoiceUrl: (year) => `/api/settlements/year-invoice.zip?year=${year}`,
+  yearDetailUrl: (year) => `/api/settlements/year-detail.zip?year=${year}`,
+}
+
+export const notificationContacts = {
+  list: () => http.get('/notification-contacts'),
+  create: (data) => http.post('/notification-contacts', data),
+  update: (id, data) => http.put(`/notification-contacts/${id}`, data),
+  remove: (id) => http.delete(`/notification-contacts/${id}`),
 }
 
 export const rates = {

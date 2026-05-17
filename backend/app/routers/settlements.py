@@ -196,6 +196,62 @@ def batch_detail_zip(
     )
 
 
+@router.get("/year-invoice.zip")
+def year_invoice_zip(
+    year: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """下载指定年份所有结算单的 invoice PDF，打包为 ZIP"""
+    import zipfile, io
+    from app.services.pdf_generator import generate_invoice_pdf
+    settlements = db.query(Settlement).filter(
+        Settlement.period_end >= f"{year}-01-01",
+        Settlement.period_end < f"{year + 1}-01-01",
+    ).all()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for s in settlements:
+            date_str = s.period_end.strftime("%Y%m%d")
+            filename = f"Invoice#{s.invoice_number}+香港蔚蓝+{date_str}.pdf"
+            zf.writestr(filename, generate_invoice_pdf(s))
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=Invoices+香港蔚蓝+{year}.zip"},
+    )
+
+
+@router.get("/year-detail.zip")
+def year_detail_zip(
+    year: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """下载指定年份所有结算单的明细 PDF，打包为 ZIP"""
+    import zipfile, io
+    from app.services.pdf_generator import generate_detail_pdf
+    from app.models.order import Order
+    settlements = db.query(Settlement).filter(
+        Settlement.period_end >= f"{year}-01-01",
+        Settlement.period_end < f"{year + 1}-01-01",
+    ).all()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for s in settlements:
+            orders = db.query(Order).filter(Order.settlement_id == s.id).all()
+            date_str = s.period_end.strftime("%Y%m%d")
+            filename = f"OrderDetail+香港蔚蓝+{date_str}.pdf"
+            zf.writestr(filename, generate_detail_pdf(s, orders))
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=OrderDetails+香港蔚蓝+{year}.zip"},
+    )
+
+
 @router.get("/{settlement_id}/invoice.pdf")
 def download_invoice(
     settlement_id: int,

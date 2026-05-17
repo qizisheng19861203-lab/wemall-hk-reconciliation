@@ -15,6 +15,7 @@ const routes = [
       { path: 'rates', component: () => import('@/views/ExchangeRates.vue') },
       { path: 'reports', component: () => import('@/views/Reports.vue') },
       { path: 'users', component: () => import('@/views/Users.vue'), meta: { adminOnly: true } },
+      { path: 'notification-contacts', component: () => import('@/views/NotificationContacts.vue'), meta: { adminOnly: true } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

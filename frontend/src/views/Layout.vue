@@ -14,6 +14,7 @@
         <el-menu-item index="/rates"><el-icon><Coin /></el-icon>汇率管理</el-menu-item>
         <el-menu-item index="/reports"><el-icon><TrendCharts /></el-icon>统计报表</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/users"><el-icon><User /></el-icon>用户管理</el-menu-item>
+        <el-menu-item v-if="auth.isAdmin" index="/notification-contacts"><el-icon><Bell /></el-icon>通知号码</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -70,7 +71,8 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted, defineAsyncComponent } from 'vue'
+import { Bell } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -101,6 +103,7 @@ const titleMap = {
   '/rates': '汇率管理',
   '/reports': '统计报表',
   '/users': '用户管理',
+  '/notification-contacts': '通知号码管理',
 }
 const pageTitle = computed(() => titleMap[route.path] || '微盟香港对账')
 const roleLabel = computed(() => ({ admin: '管理员', operator: '运营', distributor: '分销商' })[auth.user?.role] || '')
