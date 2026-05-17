@@ -19,15 +19,19 @@
   }
 
   /* 顶部 */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1a3a5c; padding-bottom: 12px; margin-bottom: 16px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1a3a5c; padding-bottom: 12px; margin-bottom: 14px; }
   .co-name { font-size: 12pt; font-weight: bold; color: #1a3a5c; }
   .co-sub  { font-size: 8.5pt; color: #666; margin-top: 3px; }
   .doc-title { text-align: right; }
   .doc-title h1 { margin: 0; font-size: 18pt; font-weight: 900; color: #1a3a5c; }
   .doc-title .meta { font-size: 9pt; color: #666; margin-top: 4px; line-height: 1.7; }
 
+  /* Bill To */
+  .bill-to { margin-bottom: 14px; padding: 10px 14px; background: #f7f9fc; border-left: 3px solid #1a3a5c; font-size: 9pt; line-height: 1.8; }
+  .bill-to-label { font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+
   /* 汇总栏 */
-  .summary-bar { display: flex; gap: 0; margin-bottom: 16px; border: 1px solid #dde3eb; border-radius: 4px; overflow: hidden; }
+  .summary-bar { display: flex; gap: 0; margin-bottom: 14px; border: 1px solid #dde3eb; border-radius: 4px; overflow: hidden; }
   .summary-item { flex: 1; padding: 8px 10px; text-align: center; border-right: 1px solid #dde3eb; }
   .summary-item:last-child { border-right: none; }
   .summary-item .s-label { font-size: 7.5pt; color: #888; margin-bottom: 3px; }
@@ -36,10 +40,9 @@
   /* 表格 */
   table { width: 100%; border-collapse: collapse; font-size: 8pt; }
   thead { display: table-header-group; }
-  th { background: #1a3a5c; color: #fff; padding: 7px 5px; text-align: center; font-weight: 600; font-size: 8pt; }
+  th { background: #1a3a5c; color: #fff; padding: 7px 5px; text-align: center; font-weight: 600; font-size: 7.5pt; line-height: 1.4; }
   td { padding: 6px 5px; border-bottom: 1px solid #eef0f3; vertical-align: middle; }
   tr:nth-child(even) td { background: #f7f9fc; }
-  tr:hover td { background: #eef3fa; }
   .refunded td { color: #aaa; text-decoration: line-through; }
   .total-row td { background: #e8edf5 !important; font-weight: bold; font-size: 9pt; border-top: 2px solid #1a3a5c; }
 
@@ -78,7 +81,15 @@
   </div>
 </div>
 
-<!-- 汇总栏（只显示 RMB，去掉 HKD 相关） -->
+<!-- Bill To -->
+<div class="bill-to">
+  <div class="bill-to-label">Bill To / 开单给</div>
+  <span style="color:#0066cc;font-weight:bold;">Purecise (Hong Kong) Health Management Limited</span><br>
+  <span style="color:#0066cc;">倍賽思（香港）健康管理有限公司</span><br>
+  UNIT 1021, BEVERLEY COMMERCIAL CENTRE, 87-105 CHATHAM ROAD SOUTH, TSIM SHA TSUI, KOWLOON, HONG KONG
+</div>
+
+<!-- 汇总栏（只显示 RMB） -->
 <div class="summary-bar">
   <div class="summary-item">
     <div class="s-label">订单数 Orders</div>
@@ -98,19 +109,17 @@
   </div>
 </div>
 
-<!-- 明细表格 -->
+<!-- 明细表格（去掉零售价、发货状态列） -->
 <table>
   <thead>
     <tr>
-      <th style="width:17%">微盟订单号<br>Order No.</th>
+      <th style="width:20%">微盟订单号<br>Order No.</th>
       <th style="width:9%">下单日期<br>Date</th>
-      <th style="width:26%">商品名称<br>Product</th>
-      <th style="width:5%">数量<br>Qty</th>
-      <th style="width:9%">零售价<br>Retail Price</th>
-      <th style="width:10%">供货价<br>Supply Price</th>
-      <th style="width:11%">供货小计<br>Subtotal</th>
-      <th style="width:7%">发货状态<br>Status</th>
-      <th style="width:6%">退款<br>Refund</th>
+      <th style="width:38%">商品名称<br>Product</th>
+      <th style="width:6%">数量<br>Qty</th>
+      <th style="width:13%">供货价<br>Supply Price</th>
+      <th style="width:14%">供货小计<br>Subtotal</th>
+      <th style="width:10%">退款<br>Refund</th>
     </tr>
   </thead>
   <tbody>
@@ -123,13 +132,9 @@
       {% endif %}
       <td>{{ item.product_name }}</td>
       <td style="text-align:center;">{{ item.quantity }}</td>
-      <td style="text-align:right;">{{ "¥%.2f"|format(item.retail_price) if item.retail_price else '-' }}</td>
       <td style="text-align:right;">{{ "¥%.2f"|format(item.supply_price) if item.supply_price else '待录入' }}</td>
       <td style="text-align:right;font-weight:600;">{{ "¥%.2f"|format(item.supply_subtotal) if item.supply_subtotal else '-' }}</td>
       {% if loop.first %}
-      <td rowspan="{{ order.items|length }}" style="text-align:center;font-size:7.5pt;">
-        {{ {"pending":"待发货","shipped":"已发货","delivered":"已签收","returned":"已退货"}.get(order.shipping_status.value, order.shipping_status.value) }}
-      </td>
       <td rowspan="{{ order.items|length }}" style="text-align:center;color:#c00;font-size:8pt;">
         {{ "¥%.2f"|format(order.refund_amount) if order.is_refunded else '' }}
       </td>
@@ -138,9 +143,9 @@
     {% endfor %}
     {% endfor %}
     <tr class="total-row">
-      <td colspan="6" style="text-align:right;">合计 Total</td>
+      <td colspan="5" style="text-align:right;">合计 Total</td>
       <td style="text-align:right;font-size:10pt;">¥{{ "%.2f"|format(settlement.net_supply_rmb) }}</td>
-      <td colspan="2"></td>
+      <td></td>
     </tr>
   </tbody>
 </table>

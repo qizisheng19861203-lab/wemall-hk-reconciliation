@@ -57,6 +57,16 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
+      - name: Sync static assets (logo, stamp) to server
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: static/
+          remote_path: /opt/wemall-hk/static/
+          remote_host: ${{ secrets.SERVER_HOST }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SERVER_SSH_KEY }}
+
       - name: Restart services
         uses: appleboy/ssh-action@v1.2.0
         with:
