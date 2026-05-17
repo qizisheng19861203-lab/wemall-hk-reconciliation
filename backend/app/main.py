@@ -55,8 +55,8 @@ def health():
     build_number = None
     commit_sha = None
 
-    # 查找 BUILD_NUMBER 文件（在 backend/ 目录下）
-    base_dir = Path(__file__).parent.parent  # backend/
+    # 查找 BUILD_NUMBER 文件（容器挂载 backend/app -> /app/app，文件在 /app/app/）
+    base_dir = Path(__file__).parent  # /app/app/
     build_file = base_dir / 'BUILD_NUMBER'
     sha_file = base_dir / 'COMMIT_SHA'
 
