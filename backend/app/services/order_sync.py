@@ -53,24 +53,24 @@ async def sync_orders(
                 order_date = datetime.fromtimestamp(create_time / 1000) if create_time else datetime.now()
 
                 status_map = {
-                    0: ShippingStatus.PENDING,
-                    1: ShippingStatus.PENDING,
-                    2: ShippingStatus.SHIPPED,
-                    3: ShippingStatus.DELIVERED,
-                    4: ShippingStatus.RETURNED,
+                    0: ShippingStatus.pending,
+                    1: ShippingStatus.pending,
+                    2: ShippingStatus.shipped,
+                    3: ShippingStatus.delivered,
+                    4: ShippingStatus.returned,
                 }
                 order_status = base_info.get("orderStatus", 0)
-                shipping_status = status_map.get(order_status, ShippingStatus.PENDING)
+                shipping_status = status_map.get(order_status, ShippingStatus.pending)
 
                 if existing:
                     existing.shipping_status = shipping_status
-                    if shipping_status == ShippingStatus.RETURNED:
+                    if shipping_status == ShippingStatus.returned:
                         existing.is_refunded = True
                     updated += 1
                     continue
 
                 # 退款/退货订单不入库
-                if shipping_status == ShippingStatus.RETURNED:
+                if shipping_status == ShippingStatus.returned:
                     skipped += 1
                     continue
 
