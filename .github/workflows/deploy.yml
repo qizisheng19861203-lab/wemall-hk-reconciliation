@@ -27,6 +27,16 @@ jobs:
           remote_user: ${{ secrets.SERVER_USER }}
           remote_key: ${{ secrets.SERVER_SSH_KEY }}
 
+      - name: Sync .git directory to server
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: .git/
+          remote_path: /opt/wemall-hk/.git/
+          remote_host: ${{ secrets.SERVER_HOST }}
+          remote_user: ${{ secrets.SERVER_USER }}
+          remote_key: ${{ secrets.SERVER_SSH_KEY }}
+
       - name: Sync frontend dist to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
