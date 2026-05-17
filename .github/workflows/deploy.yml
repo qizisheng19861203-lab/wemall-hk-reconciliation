@@ -20,7 +20,7 @@ jobs:
       - name: Sync backend code to server
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avz --delete --exclude='.env' --exclude='static/' --exclude='__pycache__/'
+          switches: -avz --delete --exclude='.env' --exclude='__pycache__/'
           path: backend/
           remote_path: /opt/wemall-hk/backend/
           remote_host: ${{ secrets.SERVER_HOST }}
