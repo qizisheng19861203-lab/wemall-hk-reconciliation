@@ -32,7 +32,29 @@
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="settlements" v-loading="loading" stripe :row-class-name="tableRowClassName" style="font-size:14px">
+      <!-- 批量下载工具栏 -->
+      <div v-if="selectedIds.length > 0" style="display:flex;align-items:center;gap:12px;padding:10px 0 14px;border-bottom:1px solid #f0f0f0;margin-bottom:12px">
+        <span style="color:#606266;font-size:14px">已选 <strong style="color:#409EFF">{{ selectedIds.length }}</strong> 条</span>
+        <el-button type="primary" size="default" @click="batchDownload('invoice')" :loading="batchLoading.invoice">
+          <el-icon style="margin-right:5px"><Download /></el-icon>
+          批量下载 Invoice ({{ selectedIds.length }})
+        </el-button>
+        <el-button type="success" size="default" @click="batchDownload('detail')" :loading="batchLoading.detail">
+          <el-icon style="margin-right:5px"><Download /></el-icon>
+          批量下载明细 ({{ selectedIds.length }})
+        </el-button>
+        <el-button size="small" text @click="selectedIds = []">清除选择</el-button>
+      </div>
+
+      <el-table
+        :data="settlements"
+        v-loading="loading"
+        stripe
+        :row-class-name="tableRowClassName"
+        style="font-size:14px"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="46" />
         <el-table-column prop="invoice_number" label="Invoice号" width="180" />
         <el-table-column label="账期" width="240">
           <template #default="{ row }">
@@ -64,11 +86,27 @@
             <el-tag :type="statusType[row.status]" size="large">{{ statusLabel[row.status] }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" min-width="280" fixed="right">
+        <el-table-column label="操作" min-width="320" fixed="right">
           <template #default="{ row }">
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <el-button size="default" @click="downloadPdf(row.id, 'invoice')">Invoice</el-button>
-              <el-button size="default" @click="downloadPdf(row.id, 'detail')">明细</el-button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <!-- Invoice 下载按钮 - 醒目蓝色 + PDF图标 -->
+              <el-button
+                size="default" type="primary"
+                @click="downloadPdf(row, 'invoice')"
+                style="font-weight:600;letter-spacing:0.3px"
+              >
+                <el-icon style="margin-right:4px"><Document /></el-icon>
+                Invoice账单
+              </el-button>
+              <!-- 明细下载按钮 - 绿色 + PDF图标 -->
+              <el-button
+                size="default" type="success"
+                @click="downloadPdf(row, 'detail')"
+                style="font-weight:600"
+              >
+                <el-icon style="margin-right:4px"><Tickets /></el-icon>
+                明细PDF
+              </el-button>
               <el-button size="default" type="warning" v-if="auth.isAdmin && row.status !== 'settled'"
                 @click="openConfirm(row)">确认收款</el-button>
               <el-button size="default" type="danger" v-if="auth.isAdmin && row.status !== 'settled'"
@@ -122,6 +160,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document, Tickets, Download } from '@element-plus/icons-vue'
 import { settlements as settlementsApi, orders as ordersApi, rates as ratesApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -134,6 +173,8 @@ const createDialog = ref(false)
 const confirmDialog = ref(false)
 const confirmingSettlement = ref(null)
 const unsettledAmount = ref(0)
+const selectedIds = ref([])
+const batchLoading = reactive({ invoice: false, detail: false })
 
 const createForm = reactive({ period_start: '', period_end: '', notes: '' })
 const confirmForm = reactive({ actual_payment_hkd: 0, notes: '' })
@@ -321,32 +362,64 @@ async function deleteSettlement(id) {
   }
 }
 
-async function downloadPdf(id, type) {
+// 格式化文件名日期：取账期结束日 YYYYMMDD
+function fmtDate(dateStr) {
+  return dateStr ? dateStr.slice(0, 10).replace(/-/g, '') : ''
+}
+
+async function downloadPdf(row, type) {
   const token = localStorage.getItem('token')
-  const url = type === 'invoice' ? settlementsApi.invoiceUrl(id) : settlementsApi.detailUrl(id)
+  const url = type === 'invoice' ? settlementsApi.invoiceUrl(row.id) : settlementsApi.detailUrl(row.id)
+  const date = fmtDate(row.period_end)
+  const filename = type === 'invoice'
+    ? `Invoice#${row.invoice_number}+香港蔚蓝+${date}.pdf`
+    : `OrderDetail+香港蔚蓝+${date}.pdf`
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    })
-
-    if (!response.ok) {
-      throw new Error('下载失败')
-    }
-
+    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    if (!response.ok) throw new Error('下载失败')
     const blob = await response.blob()
-    const downloadUrl = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = downloadUrl
-    a.download = `${type === 'invoice' ? 'invoice' : 'detail'}_${id}.pdf`
+    a.href = window.URL.createObjectURL(blob)
+    a.download = filename
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    window.URL.revokeObjectURL(downloadUrl)
+    window.URL.revokeObjectURL(a.href)
   } catch (e) {
     ElMessage.error(e.message || 'PDF下载失败')
+  }
+}
+
+function handleSelectionChange(rows) {
+  selectedIds.value = rows.map(r => r.id)
+}
+
+async function batchDownload(type) {
+  if (!selectedIds.value.length) return
+  const token = localStorage.getItem('token')
+  const url = type === 'invoice'
+    ? settlementsApi.batchInvoiceUrl(selectedIds.value)
+    : settlementsApi.batchDetailUrl(selectedIds.value)
+  const filename = type === 'invoice' ? 'Invoices+香港蔚蓝.zip' : 'OrderDetails+香港蔚蓝.zip'
+
+  batchLoading[type] = true
+  try {
+    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    if (!response.ok) throw new Error('批量下载失败')
+    const blob = await response.blob()
+    const a = document.createElement('a')
+    a.href = window.URL.createObjectURL(blob)
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(a.href)
+    ElMessage.success(`已下载 ${selectedIds.value.length} 个PDF`)
+  } catch (e) {
+    ElMessage.error(e.message || '批量下载失败')
+  } finally {
+    batchLoading[type] = false
   }
 }
 

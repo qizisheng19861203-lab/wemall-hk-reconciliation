@@ -36,6 +36,8 @@ export const settlements = {
   autoSettle: (params) => http.post('/settlements/auto-settle', null, { params }),
   invoiceUrl: (id) => `/api/settlements/${id}/invoice.pdf`,
   detailUrl: (id) => `/api/settlements/${id}/detail.pdf`,
+  batchInvoiceUrl: (ids) => `/api/settlements/batch-invoice.zip?ids=${ids.join(',')}`,
+  batchDetailUrl: (ids) => `/api/settlements/batch-detail.zip?ids=${ids.join(',')}`,
 }
 
 export const rates = {

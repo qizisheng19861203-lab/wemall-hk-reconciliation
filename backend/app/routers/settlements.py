@@ -140,6 +140,62 @@ def delete_settlement(
     return {"message": "删除成功"}
 
 
+@router.get("/batch-invoice.zip")
+def batch_invoice_zip(
+    ids: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """批量下载多个 invoice PDF，打包为 ZIP。ids 为逗号分隔的结算单ID"""
+    import zipfile, io
+    from app.services.pdf_generator import generate_invoice_pdf
+    id_list = [int(i.strip()) for i in ids.split(",") if i.strip().isdigit()]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for sid in id_list:
+            s = db.query(Settlement).filter(Settlement.id == sid).first()
+            if not s:
+                continue
+            date_str = s.period_end.strftime("%Y%m%d")
+            filename = f"Invoice#{s.invoice_number}+香港蔚蓝+{date_str}.pdf"
+            zf.writestr(filename, generate_invoice_pdf(s))
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=invoices.zip"},
+    )
+
+
+@router.get("/batch-detail.zip")
+def batch_detail_zip(
+    ids: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """批量下载多个明细 PDF，打包为 ZIP。ids 为逗号分隔的结算单ID"""
+    import zipfile, io
+    from app.services.pdf_generator import generate_detail_pdf
+    from app.models.order import Order
+    id_list = [int(i.strip()) for i in ids.split(",") if i.strip().isdigit()]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for sid in id_list:
+            s = db.query(Settlement).filter(Settlement.id == sid).first()
+            if not s:
+                continue
+            orders = db.query(Order).filter(Order.settlement_id == sid).all()
+            date_str = s.period_end.strftime("%Y%m%d")
+            filename = f"OrderDetail+香港蔚蓝+{date_str}.pdf"
+            zf.writestr(filename, generate_detail_pdf(s, orders))
+    buf.seek(0)
+    return Response(
+        content=buf.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=details.zip"},
+    )
+
+
 @router.get("/{settlement_id}/invoice.pdf")
 def download_invoice(
     settlement_id: int,

@@ -3,93 +3,151 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: A4; margin: 2cm; }
-  body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; font-size: 12pt; color: #333; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #333; padding-bottom: 16px; margin-bottom: 24px; }
-  .company-name { font-size: 20pt; font-weight: bold; }
-  .invoice-title { font-size: 22pt; font-weight: bold; text-align: right; }
-  .invoice-no { font-size: 10pt; color: #666; text-align: right; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
-  .info-block { padding: 12px; background: #f8f8f8; border-radius: 4px; }
-  .info-block label { font-size: 9pt; color: #999; display: block; margin-bottom: 4px; }
-  .info-block .value { font-size: 12pt; font-weight: 600; }
-  .amount-box { border: 2px solid #333; padding: 20px; text-align: center; margin: 24px 0; }
-  .amount-box .label { font-size: 11pt; color: #666; }
-  .amount-box .amount { font-size: 28pt; font-weight: bold; color: #000; letter-spacing: 2px; }
-  .rate-note { font-size: 9pt; color: #999; margin-top: 8px; }
-  .footer { margin-top: 48px; display: flex; justify-content: space-between; }
-  .stamp-area { text-align: center; }
-  .stamp-area img { max-height: 80px; opacity: 0.85; }
-  .sign-line { border-top: 1px solid #999; width: 200px; margin-top: 8px; padding-top: 4px; font-size: 9pt; color: #999; }
+  @page { size: A4; margin: 2cm 2cm 2.5cm 2cm; }
+  body { font-family: "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }
+
+  /* 顶部 */
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid #1a3a5c; margin-bottom: 24px; }
+  .co-name { font-size: 13pt; font-weight: bold; color: #1a3a5c; }
+  .co-addr { font-size: 9pt; color: #555; line-height: 1.7; margin-top: 4px; }
+  .inv-title { text-align: right; }
+  .inv-title h1 { margin: 0; font-size: 28pt; font-weight: 900; color: #1a3a5c; letter-spacing: 4px; }
+  .inv-title .inv-meta { font-size: 10pt; color: #555; margin-top: 6px; line-height: 1.8; }
+
+  /* 双栏信息 */
+  .two-col { display: flex; justify-content: space-between; margin-bottom: 24px; gap: 20px; }
+  .info-block { flex: 1; }
+  .info-block .block-title { font-size: 8pt; text-transform: uppercase; letter-spacing: 1px; color: #999; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; margin-bottom: 8px; }
+  .info-block .block-body { font-size: 10pt; line-height: 1.8; }
+  .billed-to-name { font-weight: bold; color: #1a3a5c; font-size: 11pt; }
+
+  /* 金额汇总表 */
+  .amount-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .amount-table th { background: #1a3a5c; color: #fff; padding: 9px 12px; font-size: 10pt; font-weight: 600; text-align: left; }
+  .amount-table td { padding: 9px 12px; border-bottom: 1px solid #e8e8e8; font-size: 11pt; }
+  .amount-table tr:last-child td { border-bottom: none; }
+  .amount-table .total-row td { background: #f0f4f8; font-weight: bold; font-size: 13pt; color: #1a3a5c; border-top: 2px solid #1a3a5c; }
+
+  /* 备注 */
+  .notes-box { background: #f8f8f8; border-left: 4px solid #1a3a5c; padding: 10px 14px; margin-bottom: 24px; font-size: 9.5pt; color: #555; }
+
+  /* 底部：收款信息 + 公章 */
+  .footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: flex-end; }
+  .payment-info { font-size: 9pt; line-height: 1.9; color: #444; }
+  .payment-info strong { color: #1a3a5c; }
+  .stamp-area { text-align: center; min-width: 130px; }
+  .stamp-area img { width: 120px; height: 120px; object-fit: contain; opacity: 0.88; mix-blend-mode: multiply; }
+
+  .status-badge { display: inline-block; padding: 3px 10px; border-radius: 3px; font-size: 9pt; font-weight: bold; }
+  .status-settled { background: #e6f4ea; color: #2e7d32; }
+  .status-pending { background: #fff3e0; color: #e65100; }
 </style>
 </head>
 <body>
+
+<!-- 顶部：公司信息 + INVOICE 标题 -->
 <div class="header">
   <div>
-    <div class="company-name">供货Invoice</div>
-    <div style="font-size:10pt;color:#666;margin-top:4px;">供应商 / Supplier</div>
+    <div class="co-name">HONGKONG BLUE HEALTH MANAGEMENT LIMITED</div>
+    <div class="co-addr">
+      香港蔚藍健康管理有限公司<br>
+      No.963 9/F., GOOD HOPE BUILDING,<br>
+      618 NATHAN ROAD, KOWLOON, HONG KONG
+    </div>
   </div>
-  <div>
-    <div class="invoice-title">INVOICE</div>
-    <div class="invoice-no">No. {{ settlement.invoice_number }}</div>
-    <div class="invoice-no">Date: {{ now.strftime('%Y-%m-%d') }}</div>
-  </div>
-</div>
-
-<div class="info-grid">
-  <div class="info-block">
-    <label>账期 / Period</label>
-    <div class="value">{{ settlement.period_start.strftime('%Y-%m-%d') }} ~ {{ settlement.period_end.strftime('%Y-%m-%d') }}</div>
-  </div>
-  <div class="info-block">
-    <label>结算状态 / Status</label>
-    <div class="value">{{ "已结清 Settled" if settlement.status.value == "settled" else "待付款 Pending" }}</div>
-  </div>
-  <div class="info-block">
-    <label>供货总额(RMB) / Supply Total</label>
-    <div class="value">¥ {{ "%.2f"|format(settlement.total_supply_rmb) }}</div>
-  </div>
-  <div class="info-block">
-    <label>退款扣减(RMB) / Refund Deduction</label>
-    <div class="value" style="color:#c00;">- ¥ {{ "%.2f"|format(settlement.total_refund_rmb) }}</div>
-  </div>
-  <div class="info-block">
-    <label>净供货额(RMB) / Net Supply</label>
-    <div class="value">¥ {{ "%.2f"|format(settlement.net_supply_rmb) }}</div>
-  </div>
-  <div class="info-block">
-    <label>汇率 / Exchange Rate</label>
-    <div class="value">1 HKD = {{ settlement.hkd_rate }} CNY</div>
+  <div class="inv-title">
+    <h1>INVOICE</h1>
+    <div class="inv-meta">
+      <strong>Invoice No.</strong>&nbsp;&nbsp;{{ settlement.invoice_number }}<br>
+      <strong>Invoice Date</strong>&nbsp;&nbsp;{{ settlement.period_end.strftime('%Y-%m-%d') }}<br>
+      <span class="status-badge {{ 'status-settled' if settlement.status.value == 'settled' else 'status-pending' }}">
+        {{ "已结清 Settled" if settlement.status.value == "settled" else "待付款 Pending" }}
+      </span>
+    </div>
   </div>
 </div>
 
-<div class="amount-box">
-  <div class="label">应付金额 / Amount Due</div>
-  <div class="amount">HKD {{ "%.2f"|format(settlement.payment_amount_hkd) }}</div>
-  <div class="rate-note">按汇率 1 HKD = {{ settlement.hkd_rate }} CNY 折算</div>
-  {% if settlement.actual_payment_hkd %}
-  <div class="rate-note" style="color:#090;margin-top:8px;">实际已付: HKD {{ "%.2f"|format(settlement.actual_payment_hkd) }} ✓</div>
+<!-- 双栏：开单给 + 账期信息 -->
+<div class="two-col">
+  <div class="info-block">
+    <div class="block-title">Bill To / 开单给</div>
+    <div class="block-body">
+      <div class="billed-to-name">Purecise (Hong Kong) Health Management Limited</div>
+      <div style="color:#1a3a5c;">倍賽思（香港）健康管理有限公司</div>
+      UNIT 1021, BEVERLEY COMMERCIAL CENTRE,<br>
+      87-105 CHATHAM ROAD SOUTH,<br>
+      TSIM SHA TSUI, KOWLOON, HONG KONG
+    </div>
+  </div>
+  <div class="info-block" style="text-align:right;">
+    <div class="block-title">Period / 账期</div>
+    <div class="block-body">
+      {{ settlement.period_start.strftime('%Y年%m月%d日') }}<br>
+      — {{ settlement.period_end.strftime('%Y年%m月%d日') }}
+    </div>
+  </div>
+</div>
+
+<!-- 金额汇总 -->
+<table class="amount-table">
+  <thead>
+    <tr>
+      <th>项目 Description</th>
+      <th style="text-align:right;">金额 Amount (RMB)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ settlement.period_start.strftime('%Y年%m月%d日') }} - {{ settlement.period_end.strftime('%Y年%m月%d日') }} 营养素采购款<br>
+          <span style="font-size:9pt;color:#888;">供货总额 Supply Total</span></td>
+      <td style="text-align:right;">¥ {{ "%.2f"|format(settlement.total_supply_rmb) }}</td>
+    </tr>
+    {% if settlement.total_refund_rmb > 0 %}
+    <tr>
+      <td style="color:#c00;">退款扣减 Refund Deduction</td>
+      <td style="text-align:right;color:#c00;">- ¥ {{ "%.2f"|format(settlement.total_refund_rmb) }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td>净供货额 Net Supply Amount</td>
+      <td style="text-align:right;">¥ {{ "%.2f"|format(settlement.net_supply_rmb) }}</td>
+    </tr>
+    <tr>
+      <td>汇率 Exchange Rate</td>
+      <td style="text-align:right;">1 HKD = {{ settlement.hkd_rate }} CNY</td>
+    </tr>
+    <tr class="total-row">
+      <td>应付合计 Total Due</td>
+      <td style="text-align:right;">HKD {{ "%.2f"|format(settlement.payment_amount_hkd) }}</td>
+    </tr>
+  </tbody>
+</table>
+
+{% if settlement.actual_payment_hkd %}
+<div class="notes-box" style="background:#e8f5e9;border-color:#2e7d32;color:#2e7d32;">
+  ✓ 实际已付 Actual Paid：HKD {{ "%.2f"|format(settlement.actual_payment_hkd) }}
+  {% if settlement.notes %} &nbsp;｜&nbsp; 备注：{{ settlement.notes }}{% endif %}
+</div>
+{% elif settlement.notes %}
+<div class="notes-box">备注 Notes：{{ settlement.notes }}</div>
+{% endif %}
+
+<!-- 底部：收款信息 + 公章 -->
+<div class="footer">
+  <div class="payment-info">
+    <strong>Payment Details / 收款资料</strong><br>
+    收款人户口号码：040259236838<br>
+    收款人户口全名：HongKong Blue Health Management Limited<br>
+    收款银行：香港上海滙豐銀行有限公司（HSBC）<br>
+    收款银行地址：No. 1 Queen's Road Central, Hong Kong<br>
+    SWIFT Code：HSBCHKHHHKH
+  </div>
+  {% if stamp_src %}
+  <div class="stamp-area">
+    <img src="{{ stamp_src }}" alt="公章" />
+  </div>
   {% endif %}
 </div>
 
-{% if settlement.notes %}
-<div style="padding:12px;border-left:3px solid #ccc;margin-bottom:24px;font-size:10pt;color:#666;">
-  <strong>备注：</strong>{{ settlement.notes }}
-</div>
-{% endif %}
-
-<div class="footer">
-  <div>
-    <div class="sign-line">收款方签章 / Payee Signature</div>
-    <br>
-    <div class="sign-line">付款方签章 / Payer Signature</div>
-  </div>
-  <div class="stamp-area">
-    <div style="font-size:9pt;color:#999;margin-bottom:8px;">公章 / Company Seal</div>
-    <!-- 公章图片在部署时替换为实际路径 -->
-    <!-- <img src="/static/seal.png" alt="公章"> -->
-    <div style="border:1px dashed #ccc;width:100px;height:100px;line-height:100px;text-align:center;color:#ccc;font-size:9pt;">公章</div>
-  </div>
-</div>
 </body>
 </html>
