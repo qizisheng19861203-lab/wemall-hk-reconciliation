@@ -3,6 +3,13 @@
     <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
       <div><h2>订单管理</h2></div>
       <div style="display:flex;gap:8px">
+        <el-select v-model="syncDays" style="width:110px" v-if="auth.isAdminOrOperator">
+          <el-option label="最近7天" :value="7" />
+          <el-option label="最近15天" :value="15" />
+          <el-option label="最近30天" :value="30" />
+          <el-option label="最近60天" :value="60" />
+          <el-option label="最近90天" :value="90" />
+        </el-select>
         <el-button @click="syncOrders" :loading="syncing" v-if="auth.isAdminOrOperator">同步微盟订单</el-button>
       </div>
     </div>
@@ -133,6 +140,7 @@ const auth = useAuthStore()
 const orders = ref([])
 const loading = ref(false)
 const syncing = ref(false)
+const syncDays = ref(7)
 const saving = ref(false)
 const page = ref(1)
 const pageSize = 50
@@ -201,8 +209,13 @@ async function saveEdit() {
 async function syncOrders() {
   syncing.value = true
   try {
-    const res = await ordersApi.syncWemall()
-    ElMessage.success(`同步完成：新增${res.created}，更新${res.updated}`)
+    const endDate = new Date()
+    const startDate = new Date(endDate - syncDays.value * 86400 * 1000)
+    const res = await ordersApi.syncWemall({
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+    })
+    ElMessage.success(`同步完成：新增${res.created}，更新${res.updated}，跳过${res.skipped}`)
     loadOrders()
   } catch (e) {
     ElMessage.error(e.message)

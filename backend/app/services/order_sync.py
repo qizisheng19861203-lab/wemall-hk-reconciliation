@@ -14,7 +14,7 @@ async def sync_orders(
 ) -> dict:
     """从微盟云同步订单（每次最多查30天，自动分段）"""
     if not start_date:
-        start_date = datetime.now() - timedelta(days=29)
+        start_date = datetime.now() - timedelta(days=7)
     if not end_date:
         end_date = datetime.now()
 
