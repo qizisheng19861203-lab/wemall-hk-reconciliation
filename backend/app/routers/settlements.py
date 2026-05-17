@@ -219,7 +219,7 @@ def year_invoice_zip(
     return Response(
         content=buf.read(),
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=Invoices+香港蔚蓝+{year}.zip"},
+        headers={"Content-Disposition": f"attachment; filename=Invoices-{year}.zip"},
     )
 
 
@@ -248,7 +248,7 @@ def year_detail_zip(
     return Response(
         content=buf.read(),
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=OrderDetails+香港蔚蓝+{year}.zip"},
+        headers={"Content-Disposition": f"attachment; filename=OrderDetails-{year}.zip"},
     )
 
 
