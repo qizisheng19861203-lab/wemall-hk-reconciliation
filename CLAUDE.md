@@ -166,13 +166,42 @@ git add . && git commit -m "描述" && git push
 - 跳过空供货价行，清理 NaN 避免 JSON 序列化错误
 
 ### 版本号显示
-- 使用 git commit hash（短格式）
-- 显示北京时间 CST
-- 前端顶部 header 显示版本号 + 更新时间
+- BUILD_NUMBER 和 COMMIT_SHA 由 deploy.yml 写入 `backend/app/`（容器挂载路径是 `backend/app:/app/app`）
+- `main.py` 的 `/health` 接口从 `Path(__file__).parent`（即 `/app/app/`）读取这两个文件
+- 版本格式：`#63 (c0abcd5)`，显示北京时间 CST
+
+### PDF 生成（weasyprint）
+- 使用 weasyprint==60.2 + pydyf==0.8.0（**必须同时锁定两个版本**）
+- weasyprint 62.x 有 transform bug；pydyf 0.9+ 与 weasyprint 60.2 API 不兼容
+- PDF 下载用 fetch + Authorization Bearer header，不用 URL 参数传 token
+- 手动触发自动结算需传 `force=true` 参数
+
+### 部署流程
+- **前端**：在本地 Mac 执行 `npm run build`，再 rsync dist/ 到服务器（服务器不跑 npm）
+- **后端**：rsync 代码到服务器，SSH 执行 `docker compose up -d --build --no-deps backend`
+- **重要**：每次改 requirements.txt 都需要重建镜像，普通代码改动只重建也很快（层缓存）
+
+### ⚠️ 腾讯云服务器网络限制
+**服务器无法访问外网**，所有安装必须走国内镜像：
+
+| 场景 | 镜像配置 |
+|------|---------|
+| pip install | `-i https://mirrors.tencent.com/pypi/simple/`（已配置在 Dockerfile）|
+| apt-get（Docker build）| Dockerfile 直接覆盖写 `/etc/apt/sources.list.d/debian.sources` 为腾讯云源 |
+| npm install | 在本地 Mac 跑，不在服务器跑；若必须在服务器跑用 `--registry=https://registry.npmmirror.com` |
+| docker pull 基础镜像 | 若拉取失败需配置 Docker Hub 国内镜像或提前在本机 push |
+
+**Dockerfile apt 镜像配置方式**（直接覆盖，不用 sed，避免 shell 优先级 bug）：
+```dockerfile
+RUN printf 'Types: deb\nURIs: http://mirrors.tencent.com/debian\nSuites: trixie trixie-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n\nTypes: deb\nURIs: http://mirrors.tencent.com/debian-security\nSuites: trixie-security\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n' \
+    > /etc/apt/sources.list.d/debian.sources
+```
 
 ## 待办事项
 - [x] 微盟API凭证已配置
 - [x] 汇率改用免费数据源
 - [x] GitHub Actions 自动部署已配置
+- [x] 版本号显示修复（BUILD_NUMBER/COMMIT_SHA 写入正确路径）
+- [x] PDF 下载修复（weasyprint==60.2 + pydyf==0.8.0）
 - [ ] 上传公章图片到 `static/seal.png`（发票PDF会显示）
 - [ ] 申请腾讯云短信模板（结算通知用）
