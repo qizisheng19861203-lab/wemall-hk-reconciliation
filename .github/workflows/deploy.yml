@@ -65,8 +65,11 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd /opt/wemall-hk
+            # 写入版本信息文件
+            echo "${{ github.run_number }}" > backend/BUILD_NUMBER
+            echo "${{ github.sha }}" > backend/COMMIT_SHA
             # 清理 Python 缓存
             docker compose exec -T backend bash /app/reload.sh || true
             # 重启所有服务
             docker compose restart backend frontend nginx
-            echo "部署完成 $(date)"
+            echo "部署完成 $(date) - Build #${{ github.run_number }} - Commit ${{ github.sha }}"

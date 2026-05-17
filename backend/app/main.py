@@ -49,23 +49,60 @@ def health():
     import subprocess
     from datetime import datetime, timezone, timedelta
     CST = timezone(timedelta(hours=8))
-    # 用git commit hash作为版本号
+
+    # 优先读取构建时写入的版本信息
+    build_number = None
+    commit_sha = None
     try:
-        git_hash = subprocess.check_output(
-            ['git', 'rev-parse', '--short', 'HEAD'],
-            cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL
-        ).decode().strip()
+        build_file = os.path.join(os.path.dirname(__file__), '..', 'BUILD_NUMBER')
+        if os.path.exists(build_file):
+            with open(build_file) as f:
+                build_number = f.read().strip()
+    except Exception:
+        pass
+
+    try:
+        sha_file = os.path.join(os.path.dirname(__file__), '..', 'COMMIT_SHA')
+        if os.path.exists(sha_file):
+            with open(sha_file) as f:
+                commit_sha = f.read().strip()[:7]  # 短格式
+    except Exception:
+        pass
+
+    # 如果文件不存在，尝试从 git 获取
+    if not commit_sha:
+        try:
+            git_hash = subprocess.check_output(
+                ['git', 'rev-parse', '--short', 'HEAD'],
+                cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL
+            ).decode().strip()
+            commit_sha = git_hash
+        except Exception:
+            pass
+
+    # 获取更新时间
+    try:
         git_time_raw = subprocess.check_output(
             ['git', 'log', '-1', '--format=%ct'],
             cwd=os.path.dirname(__file__), stderr=subprocess.DEVNULL
         ).decode().strip()
         update_dt = datetime.fromtimestamp(int(git_time_raw), tz=CST)
-        version = git_hash
         update_time = update_dt.strftime("%Y-%m-%d %H:%M CST")
     except Exception:
         now = datetime.now(CST)
-        version = now.strftime("%Y%m%d-%H%M%S")
         update_time = now.strftime("%Y-%m-%d %H:%M CST")
+
+    # 构造版本号显示
+    if build_number and commit_sha:
+        version = f"#{build_number} ({commit_sha})"
+    elif commit_sha:
+        version = commit_sha
+    elif build_number:
+        version = f"#{build_number}"
+    else:
+        now = datetime.now(CST)
+        version = now.strftime("%Y%m%d-%H%M%S")
+
     return {
         "status": "ok",
         "app": settings.APP_NAME,
