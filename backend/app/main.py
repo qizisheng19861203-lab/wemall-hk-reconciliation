@@ -10,12 +10,20 @@ from app.routers.settlements import router as settlements_router, rates_router
 from app.routers.reports import router as reports_router
 from app.routers.notification_contacts import router as contacts_router
 from app.services.scheduler import start_scheduler, stop_scheduler
+from sqlalchemy import text
 import app.models  # ensure all models are imported for table creation
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    # DB migration: add email column to notification_contacts if not exists
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE notification_contacts ADD COLUMN IF NOT EXISTS email VARCHAR(200) NULL COMMENT '邮箱地址'"))
+            conn.commit()
+    except Exception:
+        pass
     start_scheduler()
     yield
     stop_scheduler()

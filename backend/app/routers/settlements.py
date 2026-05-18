@@ -252,6 +252,47 @@ def year_detail_zip(
     )
 
 
+@router.post("/{settlement_id}/send-email")
+def send_settlement_email_route(
+    settlement_id: int,
+    include_detail: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """发送结算账单邮件给所有启用邮箱的联系人"""
+    from app.services.email_service import send_settlement_email
+    from app.models.notification_contact import NotificationContact
+
+    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="结算单不存在")
+
+    # 获取所有启用且有邮箱的联系人
+    contacts = db.query(NotificationContact).filter(
+        NotificationContact.is_active == True,
+        NotificationContact.email.isnot(None),
+        NotificationContact.email != "",
+    ).all()
+    if not contacts:
+        raise HTTPException(status_code=400, detail="没有配置邮箱通知联系人，请先在「通知号码」页面添加邮箱")
+
+    to_emails = [c.email for c in contacts]
+
+    # Generate PDFs
+    invoice_pdf = generate_invoice_pdf(s)
+    detail_pdf = None
+    if include_detail:
+        orders = db.query(Order).filter(Order.settlement_id == settlement_id).all()
+        detail_pdf = generate_detail_pdf(s, orders)
+
+    result = send_settlement_email(to_emails, s, invoice_pdf, detail_pdf)
+    return {
+        "sent": result["sent"],
+        "recipients": to_emails,
+        "error": result.get("error"),
+    }
+
+
 @router.get("/{settlement_id}/invoice.pdf")
 def download_invoice(
     settlement_id: int,

@@ -157,6 +157,19 @@
                 <el-icon v-if="notifyingId !== row.id" style="margin-right:4px"><Bell /></el-icon>
                 发通知
               </el-button>
+              <!-- 邮件通知按钮 -->
+              <el-button
+                v-if="auth.isAdmin"
+                size="default"
+                type="info"
+                plain
+                @click="sendEmail(row.id)"
+                :loading="emailingId === row.id"
+                style="border-color:#409eff;color:#409eff;background:#ecf5ff"
+              >
+                <el-icon v-if="emailingId !== row.id" style="margin-right:4px"><Message /></el-icon>
+                发邮件
+              </el-button>
               <el-button size="default" type="danger" plain v-if="auth.isAdmin && row.status !== 'settled'"
                 @click="deleteSettlement(row.id)">删除</el-button>
             </div>
@@ -207,7 +220,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Tickets, Download, Bell } from '@element-plus/icons-vue'
+import { Document, Tickets, Download, Bell, Message } from '@element-plus/icons-vue'
 import { settlements as settlementsApi, orders as ordersApi, rates as ratesApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -225,6 +238,7 @@ const batchLoading = reactive({ invoice: false, detail: false })
 const yearLoading = reactive({ invoice: false, detail: false })
 const downloadingId = ref('')   // 单个下载时记录 `${id}-${type}`
 const notifyingId = ref(null)   // 发短信时记录 id
+const emailingId = ref('')       // 发邮件时记录 id
 
 // 年度下载
 const currentYear = new Date().getFullYear()
@@ -390,6 +404,23 @@ function fmtDate(dateStr) {
   return dateStr ? dateStr.slice(0, 10).replace(/-/g, '') : ''
 }
 
+function triggerDownload(blob, filename) {
+  const objectUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.style.display = 'none'
+  a.href = objectUrl
+  a.setAttribute('download', filename)
+  document.body.appendChild(a)
+  // Use a tick delay so browser processes the click before we clean up
+  setTimeout(() => {
+    a.click()
+    setTimeout(() => {
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(objectUrl)
+    }, 200)
+  }, 10)
+}
+
 // 显示下载进度条
 function showProgress(text) {
   downloadProgress.show = true
@@ -420,13 +451,7 @@ async function downloadPdf(row, type) {
     if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
     if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
-    const a = document.createElement('a')
-    a.href = window.URL.createObjectURL(blob)
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(a.href)
+    triggerDownload(blob, filename)
     hideProgress()
   } catch (e) {
     hideProgress()
@@ -458,13 +483,7 @@ async function batchDownload(type) {
     if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
     if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
-    const a = document.createElement('a')
-    a.href = window.URL.createObjectURL(blob)
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(a.href)
+    triggerDownload(blob, filename)
     hideProgress()
     ElMessage.success(`已下载 ${selectedIds.value.length} 个PDF`)
   } catch (e) {
@@ -495,13 +514,7 @@ async function yearDownload(type) {
     if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
     if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
-    const a = document.createElement('a')
-    a.href = window.URL.createObjectURL(blob)
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(a.href)
+    triggerDownload(blob, filename)
     hideProgress()
     ElMessage.success(`${year} 年全部PDF已下载`)
   } catch (e) {
@@ -526,6 +539,19 @@ async function sendNotify(id) {
     if (e !== 'cancel') ElMessage.error(e.message || '发送失败')
   } finally {
     notifyingId.value = null
+  }
+}
+
+async function sendEmail(id) {
+  if (emailingId.value === id) return
+  emailingId.value = id
+  try {
+    const res = await settlementsApi.sendEmail(id)
+    ElMessage.success(`邮件已发送给 ${res.recipients?.join(', ')}`)
+  } catch (e) {
+    ElMessage.error(e.message || '邮件发送失败')
+  } finally {
+    emailingId.value = ''
   }
 }
 

@@ -11,12 +11,14 @@ from app.core.deps import get_current_user, require_admin
 class ContactCreate(BaseModel):
     name: str
     phone: str
+    email: Optional[str] = None
 
 
 class ContactUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
+    email: Optional[str] = None
 
 
 class ContactResponse(BaseModel):
@@ -24,6 +26,7 @@ class ContactResponse(BaseModel):
     name: str
     phone: str
     is_active: bool
+    email: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -43,7 +46,7 @@ def create_contact(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    contact = NotificationContact(name=payload.name, phone=payload.phone)
+    contact = NotificationContact(name=payload.name, phone=payload.phone, email=payload.email)
     db.add(contact)
     db.commit()
     db.refresh(contact)

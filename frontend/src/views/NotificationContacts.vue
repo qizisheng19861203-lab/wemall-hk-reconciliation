@@ -23,6 +23,12 @@
             <span style="font-family:monospace;font-size:14px;color:#303133">{{ row.phone }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="邮箱" prop="email" min-width="200">
+          <template #default="{ row }">
+            <span v-if="row.email" style="font-size:13px;color:#303133">{{ row.email }}</span>
+            <span v-else style="font-size:13px;color:#c0c4cc">未设置</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120" align="center">
           <template #default="{ row }">
             <el-switch
@@ -63,6 +69,7 @@
       <div style="font-size:13px;color:#606266;line-height:2">
         <strong style="color:#303133">使用说明：</strong><br>
         · 在结算管理页点击「发通知」按钮时，所有<strong>启用</strong>状态的号码都会收到短信<br>
+        · 在结算管理页点击「发邮件」按钮时，所有<strong>启用</strong>且填写了邮箱的联系人都会收到账单邮件<br>
         · 手机号格式支持：<code>13812345678</code>（自动加 +86）或 <code>+85213812345</code>（含国际区号）<br>
         · 关闭开关可临时禁用某个号码，不会删除记录
       </div>
@@ -77,6 +84,10 @@
         <el-form-item label="手机号" required>
           <el-input v-model="form.phone" placeholder="如：13812345678 或 +85212345678" />
           <div style="font-size:12px;color:#909399;margin-top:4px">大陆号码直接填11位，港澳号码填 +852/+853 开头</div>
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="form.email" placeholder="如：contact@example.com（可选）" />
+          <div style="font-size:12px;color:#909399;margin-top:4px">填写后可在结算管理页发送PDF账单邮件</div>
         </el-form-item>
         <el-form-item label="状态" v-if="editingId">
           <el-switch v-model="form.is_active" active-text="启用" inactive-text="禁用" />
@@ -105,7 +116,7 @@ const loading = ref(false)
 const formDialog = ref(false)
 const submitting = ref(false)
 const editingId = ref(null)
-const form = reactive({ name: '', phone: '', is_active: true })
+const form = reactive({ name: '', phone: '', email: '', is_active: true })
 
 async function load() {
   loading.value = true
@@ -120,13 +131,13 @@ async function load() {
 
 function openAdd() {
   editingId.value = null
-  Object.assign(form, { name: '', phone: '', is_active: true })
+  Object.assign(form, { name: '', phone: '', email: '', is_active: true })
   formDialog.value = true
 }
 
 function openEdit(row) {
   editingId.value = row.id
-  Object.assign(form, { name: row.name, phone: row.phone, is_active: row.is_active })
+  Object.assign(form, { name: row.name, phone: row.phone, email: row.email || '', is_active: row.is_active })
   formDialog.value = true
 }
 
@@ -136,10 +147,10 @@ async function submitForm() {
   submitting.value = true
   try {
     if (editingId.value) {
-      await contactsApi.update(editingId.value, { name: form.name, phone: form.phone, is_active: form.is_active })
+      await contactsApi.update(editingId.value, { name: form.name, phone: form.phone, email: form.email || null, is_active: form.is_active })
       ElMessage.success('修改成功')
     } else {
-      await contactsApi.create({ name: form.name, phone: form.phone })
+      await contactsApi.create({ name: form.name, phone: form.phone, email: form.email || null })
       ElMessage.success('添加成功')
     }
     formDialog.value = false

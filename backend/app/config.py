@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     # Notification
     SETTLEMENT_NOTIFY_PHONE: str = ""  # comma separated admin phones
 
+    # Email (SMTP) — 免费邮件通知
+    SMTP_HOST: str = ""           # e.g. smtp.qq.com or smtp.gmail.com
+    SMTP_PORT: int = 465          # 465=SSL, 587=TLS
+    SMTP_USER: str = ""           # sender email
+    SMTP_PASSWORD: str = ""       # QQ邮箱授权码 or Gmail App Password
+    SMTP_FROM_NAME: str = "香港蔚蓝健康"
+    SMTP_USE_SSL: bool = True     # True for port 465, False for 587 (STARTTLS)
+
     # CORS
     CORS_ORIGINS: str = "*"
 
