@@ -5,6 +5,7 @@ from app.models.settlement import Settlement
 from app.models.order import Order
 from typing import List
 from datetime import datetime
+from app.utils.fps_qr import fps_qr_base64
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "static")
@@ -38,6 +39,7 @@ def generate_invoice_pdf(settlement: Settlement) -> bytes:
         "now": datetime.now(),
         "stamp_src": _get_image_base64("seal.png", "image/png"),
         "logo_src": _get_image_base64("logo.jpg", "image/jpeg"),
+        "fps_qr_uri": fps_qr_base64("9711102", "BLUE HEALTH MANAGEMENT"),
     })
     return _html_to_pdf(html)
 

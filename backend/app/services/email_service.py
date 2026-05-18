@@ -8,6 +8,7 @@ from app.config import settings
 import logging
 import os
 import base64
+from app.utils.fps_qr import fps_qr_base64
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ def render_invoice_html(settlement) -> str:
         now=datetime.now(),
         stamp_src=_get_image_base64("seal.png", "image/png"),
         logo_src=_get_image_base64("logo.jpg", "image/jpeg"),
+        fps_qr_uri=fps_qr_base64("9711102", "BLUE HEALTH MANAGEMENT"),
     )
 
 

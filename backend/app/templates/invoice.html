@@ -170,14 +170,28 @@
   </div>
 </div>
 
-<!-- 付款资料 -->
+<!-- 付款资料 + FPS二维码 -->
 <div class="payment-details">
-  <strong>Payment Details / 付款资料</strong><br>
-  1. 收款人戶口號碼：040259236838<br>
-  2. 收款人戶口全名：HongKong Blue Health Management Limited<br>
-  3. 收款銀行名稱：香港上海滙豐銀行有限公司<br>
-  4. 收款銀行地址：香港皇后大道中1號 No. 1 Queen's Road Central Hong Kong<br>
-  5. SWIFT Code：HSBCHKHHHKH
+  <table style="width:100%; border-collapse:collapse;">
+    <tr>
+      <td style="vertical-align:top; padding-right:16px;">
+        <strong>Payment Details / 付款资料</strong><br>
+        1. 收款人戶口號碼：040259236838<br>
+        2. 收款人戶口全名：HongKong Blue Health Management Limited<br>
+        3. 收款銀行名稱：香港上海滙豐銀行有限公司<br>
+        4. 收款銀行地址：香港皇后大道中1號 No. 1 Queen's Road Central Hong Kong<br>
+        5. SWIFT Code：HSBCHKHHHKH
+      </td>
+      {% if fps_qr_uri %}
+      <td style="width:130px; vertical-align:middle; text-align:center; border-left:1px solid #ddd; padding-left:12px;">
+        <img src="{{ fps_qr_uri }}" style="width:90px; height:90px; display:block; margin:0 auto 4px auto;" alt="FPS QR">
+        <div style="font-size:8pt; font-weight:bold; color:#333;">转数快 FPS</div>
+        <div style="font-size:7.5pt; color:#555;">FPS ID: 9711102</div>
+        <div style="font-size:7pt; color:#888;">扫码付款</div>
+      </td>
+      {% endif %}
+    </tr>
+  </table>
 </div>
 
 </body>
