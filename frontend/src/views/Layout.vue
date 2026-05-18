@@ -44,7 +44,7 @@
           </el-dropdown>
 
           <!-- 修改密码弹窗 -->
-          <el-dialog v-model="pwdDialog" title="修改密码" width="400px">
+          <el-dialog v-model="pwdDialog" title="修改密码" width="400px" :teleported="false">
             <el-form :model="pwdForm" label-width="90px">
               <el-form-item label="原密码">
                 <el-input v-model="pwdForm.old_password" type="password" show-password />

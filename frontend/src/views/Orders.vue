@@ -177,7 +177,7 @@
     </el-card>
 
     <!-- 编辑弹窗 -->
-    <el-dialog v-model="editDialog" title="编辑订单" width="500px">
+    <el-dialog v-model="editDialog" title="编辑订单" width="500px" :teleported="false">
       <el-form :model="editForm" label-width="90px">
         <el-form-item label="发货状态">
           <el-select v-model="editForm.shipping_status">
@@ -502,6 +502,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (autoRefreshTimer) clearInterval(autoRefreshTimer)
+  // 重置 loading 状态，防止 v-loading mask 残留
+  loading.value = false
+  editDialog.value = false
 })
 </script>
 

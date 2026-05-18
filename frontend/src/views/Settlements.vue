@@ -179,7 +179,7 @@
     </el-card>
 
     <!-- 自定义结算 -->
-    <el-dialog v-model="createDialog" title="自定义结算单" width="500px">
+    <el-dialog v-model="createDialog" title="自定义结算单" width="500px" :teleported="false">
       <el-alert type="info" :closable="false" style="margin-bottom:12px">
         选择日期范围，系统会自动计算该周期内的未结算订单并获取今日汇率
       </el-alert>
@@ -199,7 +199,7 @@
     </el-dialog>
 
     <!-- 确认收款 -->
-    <el-dialog v-model="confirmDialog" title="确认收款" width="420px">
+    <el-dialog v-model="confirmDialog" title="确认收款" width="420px" :teleported="false">
       <el-form :model="confirmForm" label-width="110px">
         <el-form-item label="应付金额(HKD)">
           <strong style="font-size:18px">HK${{ confirmingSettlement?.payment_amount_hkd }}</strong>
@@ -218,7 +218,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Tickets, Download, Bell, Message } from '@element-plus/icons-vue'
 import { settlements as settlementsApi, orders as ordersApi, rates as ratesApi } from '@/api'
@@ -577,6 +577,23 @@ async function triggerAutoSettle() {
     if (e !== 'cancel') ElMessage.error(e.message || '操作失败')
   }
 }
+
+// 离开页面时重置所有状态，防止 loading mask / overlay 残留拦截点击
+onBeforeUnmount(() => {
+  loading.value = false
+  creating.value = false
+  confirming.value = false
+  createDialog.value = false
+  confirmDialog.value = false
+  batchLoading.invoice = false
+  batchLoading.detail = false
+  yearLoading.invoice = false
+  yearLoading.detail = false
+  downloadingId.value = ''
+  notifyingId.value = null
+  emailingId.value = ''
+  downloadProgress.show = false
+})
 
 onMounted(load)
 </script>

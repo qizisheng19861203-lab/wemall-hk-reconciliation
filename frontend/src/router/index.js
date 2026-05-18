@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { nextTick } from 'vue'
 
 const routes = [
   { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
@@ -34,6 +35,23 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !isLoggedIn) return '/login'
   if (to.meta.adminOnly && !isAdmin) return '/dashboard'
   if (to.path === '/login' && isLoggedIn) return '/dashboard'
+})
+
+// 每次路由切换后，清理 Element Plus 遗留的浮层（dialog/select/datepicker overlay）
+// 这些浮层 teleport 到 <body>，导航离开时若未关闭会残留并拦截所有点击
+router.afterEach(() => {
+  nextTick(() => {
+    // 移除孤立的遮罩层
+    document.querySelectorAll('.el-overlay').forEach(el => {
+      // 只移除没有可见内容的遮罩（dialog 关闭动画已结束但未清理）
+      const hasVisibleDialog = el.querySelector('.el-dialog, .el-message-box')
+      if (!hasVisibleDialog) el.remove()
+    })
+    // 移除孤立的下拉浮层
+    document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
+      if (!el.closest('[data-v]') && el.parentNode === document.body) el.remove()
+    })
+  })
 })
 
 export default router
