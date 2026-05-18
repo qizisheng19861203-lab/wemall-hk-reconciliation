@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.product import Product
+from app.models.order import OrderItem
 from app.models.user import User, UserRole
 from app.core.deps import get_current_user, require_admin
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
@@ -42,7 +43,7 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), _: Use
     return product
 
 
-@router.put("/{product_id}", response_model=ProductResponse)
+@router.put("/{product_id}")
 def update_product(
     product_id: int,
     payload: ProductUpdate,
@@ -52,11 +53,47 @@ def update_product(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="产品不存在")
-    for k, v in payload.model_dump(exclude_none=True).items():
+
+    update_data = payload.model_dump(exclude_none=True)
+    new_supply_price = update_data.get("supply_price")
+
+    for k, v in update_data.items():
         setattr(product, k, v)
     db.commit()
     db.refresh(product)
-    return product
+
+    # 自动补录：如果更新了供货价，将所有关联的待录价订单条目补齐
+    backfilled_count = 0
+    if new_supply_price is not None:
+        items_to_backfill = (
+            db.query(OrderItem)
+            .filter(
+                OrderItem.product_id == product_id,
+                OrderItem.supply_price.is_(None),
+            )
+            .all()
+        )
+        for item in items_to_backfill:
+            item.supply_price = new_supply_price
+            item.supply_subtotal = float(new_supply_price) * item.quantity
+        if items_to_backfill:
+            db.commit()
+        backfilled_count = len(items_to_backfill)
+
+    # 返回产品信息 + 补录数量
+    result = {
+        "id": product.id,
+        "wemall_product_id": product.wemall_product_id,
+        "name": product.name,
+        "sku": product.sku,
+        "category": product.category,
+        "retail_price": float(product.retail_price) if product.retail_price else None,
+        "supply_price": float(product.supply_price) if product.supply_price else None,
+        "image_url": product.image_url,
+        "is_active": product.is_active,
+        "backfilled_count": backfilled_count,
+    }
+    return result
 
 
 @router.post("/sync-wemall")
@@ -228,6 +265,18 @@ async def import_supply_price(
             if product:
                 product.supply_price = supply_price
                 updated += 1
+                # 补录该产品的待录价订单条目
+                items_to_backfill = (
+                    db.query(OrderItem)
+                    .filter(
+                        OrderItem.product_id == product.id,
+                        OrderItem.supply_price.is_(None),
+                    )
+                    .all()
+                )
+                for item in items_to_backfill:
+                    item.supply_price = supply_price
+                    item.supply_subtotal = supply_price * item.quantity
             else:
                 not_found += 1
                 # 确保not_found_list里没有NaN值

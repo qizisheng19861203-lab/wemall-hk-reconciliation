@@ -120,9 +120,18 @@ async function save() {
   if (!form.name) return ElMessage.warning('产品名称不能为空')
   saving.value = true
   try {
-    if (editingId.value) await productsApi.update(editingId.value, form)
-    else await productsApi.create(form)
-    ElMessage.success('保存成功')
+    if (editingId.value) {
+      const res = await productsApi.update(editingId.value, form)
+      const backfilled = res?.backfilled_count ?? 0
+      if (backfilled > 0) {
+        ElMessage.success(`保存成功，已自动补录 ${backfilled} 条历史订单供货价`)
+      } else {
+        ElMessage.success('保存成功')
+      }
+    } else {
+      await productsApi.create(form)
+      ElMessage.success('保存成功')
+    }
     dialog.value = false
     load()
   } catch (e) { ElMessage.error(e.message) }

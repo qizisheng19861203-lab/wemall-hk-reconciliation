@@ -44,6 +44,28 @@
           start-placeholder="自定义开始" end-placeholder="自定义结束"
           value-format="YYYY-MM-DDTHH:mm:ss" style="width:280px" @change="onDateRangeChange" />
       </div>
+
+      <!-- 区间结算概览 -->
+      <div v-if="periodStats.loaded" style="margin-top:12px;padding:10px 14px;background:#f5f7fa;border-radius:6px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#909399;font-weight:500">{{ periodRangeLabel }} 区间：</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:#606266">供货总额</span>
+          <span style="font-size:15px;font-weight:700;color:#303133">¥{{ periodStats.total_supply_rmb.toFixed(2) }}</span>
+        </div>
+        <div style="width:1px;height:20px;background:#dcdfe6"></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <el-tag type="success" size="small">已结算</el-tag>
+          <span style="font-size:14px;font-weight:600;color:#67c23a">¥{{ periodStats.settled_rmb.toFixed(2) }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <el-tag type="warning" size="small">未结算</el-tag>
+          <span style="font-size:14px;font-weight:600;color:#e6a23c">¥{{ periodStats.unsettled_rmb.toFixed(2) }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:#909399">订单数</span>
+          <span style="font-size:14px;font-weight:600;color:#606266">{{ periodStats.total_orders }}</span>
+        </div>
+      </div>
     </el-card>
 
     <!-- 筛选 -->
@@ -112,6 +134,14 @@
           <template #default="{ row }">
             <span v-if="row._item.supply_subtotal" :class="{ 'text-red': row.is_refunded }">
               ¥{{ Number(row._item.supply_subtotal).toFixed(2) }}
+            </span>
+            <span v-else style="color:#C0C4CC">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="客户支付(RMB)" width="120" align="right">
+          <template #default="{ row }">
+            <span v-if="row._item.retail_price" style="color:#909399">
+              ¥{{ (Number(row._item.retail_price) * row._item.quantity).toFixed(2) }}
             </span>
             <span v-else style="color:#C0C4CC">-</span>
           </template>
@@ -200,6 +230,15 @@ const lastRefreshTime = ref(null)
 const quickMode = ref('month')
 
 const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0 })
+const periodStats = reactive({ loaded: false, total_supply_rmb: 0, settled_rmb: 0, unsettled_rmb: 0, total_orders: 0 })
+
+const periodRangeLabel = computed(() => {
+  const r = filter.dateRange
+  if (!r?.[0] || !r?.[1]) return ''
+  const s = r[0].slice(0, 10)
+  const e = r[1].slice(0, 10)
+  return s === e ? s : `${s} ~ ${e}`
+})
 
 const filter = reactive({
   dateRange: null,
@@ -273,6 +312,7 @@ function setQuickRange(mode) {
   page.value = 1
   loadOrders()
   loadStats()
+  loadPeriodStats()
 }
 
 function onMonthPick(val) {
@@ -285,6 +325,7 @@ function onMonthPick(val) {
   page.value = 1
   loadOrders()
   loadStats()
+  loadPeriodStats()
 }
 
 function onDateRangeChange() {
@@ -293,6 +334,7 @@ function onDateRangeChange() {
   page.value = 1
   loadOrders()
   loadStats()
+  loadPeriodStats()
 }
 
 const flatRows = computed(() => {
@@ -306,7 +348,9 @@ const flatRows = computed(() => {
   return rows
 })
 
-const MERGE_COLS = [0, 1, 6, 7, 8, 9]
+// 列索引: 订单号[0] 日期[1] 商品名[2] 数量[3] 供货单价[4] 供货小计[5] 客户支付[6] 发货状态[7] 退款[8] 结算[9] 操作[10]
+// 合并整订单行的列（跨商品条目合并）：订单号、日期、发货状态、退款、结算、操作
+const MERGE_COLS = [0, 1, 7, 8, 9, 10]
 function spanMethod({ rowIndex, columnIndex }) {
   if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
   const row = flatRows.value[rowIndex]
@@ -349,9 +393,29 @@ async function loadStats() {
   }
 }
 
+async function loadPeriodStats() {
+  if (!filter.dateRange?.[0] || !filter.dateRange?.[1]) {
+    periodStats.loaded = false
+    return
+  }
+  try {
+    const res = await ordersApi.stats({ start_date: filter.dateRange[0], end_date: filter.dateRange[1] })
+    const total = res.total_supply_rmb ?? 0
+    const unsettled = res.unsettled_rmb ?? 0
+    periodStats.total_supply_rmb = total
+    periodStats.unsettled_rmb = unsettled
+    periodStats.settled_rmb = Math.max(0, total - unsettled)
+    periodStats.total_orders = res.total_orders ?? 0
+    periodStats.loaded = true
+  } catch (e) {
+    periodStats.loaded = false
+  }
+}
+
 async function refreshStats() {
   await loadStats()
   await loadOrders()
+  await loadPeriodStats()
 }
 
 function doSearch() {
@@ -373,6 +437,7 @@ function resetFilter() {
   page.value = 1
   loadOrders()
   loadStats()
+  loadPeriodStats()
 }
 
 function openEdit(row) {
@@ -395,6 +460,7 @@ async function saveEdit() {
     editDialog.value = false
     loadOrders()
     loadStats()
+    loadPeriodStats()
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
@@ -414,6 +480,7 @@ async function syncOrders() {
     ElMessage.success(`同步完成：新增${res.created}，更新${res.updated}，跳过${res.skipped}`)
     loadOrders()
     loadStats()
+    loadPeriodStats()
   } catch (e) {
     ElMessage.error(e.message)
   } finally {
@@ -428,9 +495,11 @@ onMounted(() => {
   filter.dateRange = range
   loadOrders()
   loadStats()
+  loadPeriodStats()
   autoRefreshTimer = setInterval(() => {
     loadStats()
     loadOrders()
+    loadPeriodStats()
   }, 10 * 60 * 1000)
 })
 
