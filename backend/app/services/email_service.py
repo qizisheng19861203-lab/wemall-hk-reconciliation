@@ -4,6 +4,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
+from email.header import Header
+from email.utils import formataddr
 from app.config import settings
 import logging
 import os
@@ -61,9 +63,9 @@ def send_settlement_email(
     )
 
     msg = MIMEMultipart('mixed')
-    msg['From'] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USER}>"
+    msg['From'] = formataddr((str(Header(settings.SMTP_FROM_NAME, 'utf-8')), settings.SMTP_USER))
     msg['To'] = ', '.join(to_emails)
-    msg['Subject'] = subject
+    msg['Subject'] = Header(subject, 'utf-8')
 
     # Render invoice HTML for email body
     try:

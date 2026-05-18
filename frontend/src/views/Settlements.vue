@@ -545,10 +545,22 @@ async function sendNotify(id) {
 async function sendEmail(id) {
   if (emailingId.value === id) return
   emailingId.value = id
+  const loadingMsg = ElMessage({
+    message: '正在生成账单并发送邮件，请稍候（约10-20秒）…',
+    type: 'info',
+    duration: 0,
+    showClose: false,
+  })
   try {
     const res = await settlementsApi.sendEmail(id)
-    ElMessage.success(`邮件已发送给 ${res.recipients?.join(', ')}`)
+    loadingMsg.close()
+    if (res.sent > 0) {
+      ElMessage.success(`✅ 邮件已成功发送给 ${res.sent} 位联系人`)
+    } else {
+      ElMessage.warning(res.error || '没有可用的邮件联系人，请在通知号码管理中填写邮箱')
+    }
   } catch (e) {
+    loadingMsg.close()
     ElMessage.error(e.message || '邮件发送失败')
   } finally {
     emailingId.value = ''
