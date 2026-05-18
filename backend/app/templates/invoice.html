@@ -3,58 +3,76 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: A4; margin: 1.8cm 2cm 2cm 2cm; }
+  /*
+   * ⚠️ CRITICAL WeasyPrint 规则（禁止修改，每次改动必须遵守）：
+   * 1. 绝对不能用 CSS transform（transform: translate 等）— WeasyPrint 不支持，图片会消失
+   * 2. 公章定位：使用 3列 flexbox（左文字 | 中间公章 | 右金额），无需 position/transform
+   * 3. Invoice 必须1页：字体 ≤10.5pt，行距 ≤1.5，页边距 1.2cm，控制总高度
+   * 4. Content-Disposition header filename 只能用 ASCII，不能含中文
+   */
+  @page { size: A4; margin: 1.2cm 1.5cm 1.2cm 1.5cm; }
   body {
     font-family: "Noto Sans CJK SC", "WenQuanYi Zen Hei", "Source Han Sans CN",
                  "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
-    font-size: 12pt; color: #333; line-height: 1.5;
+    font-size: 10.5pt; color: #333; line-height: 1.45;
   }
 
   /* 顶部 */
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-  .company-info { line-height: 1.7; font-size: 11pt; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .company-info { line-height: 1.6; font-size: 10pt; }
 
   /* 标题行 */
-  .title-section { display: flex; justify-content: space-between; align-items: flex-end;
-                   border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-  .title-section h1 { margin: 0 0 5px 0; font-size: 32pt; font-weight: bold; letter-spacing: 3px; }
-  .title-section .inv-no { margin: 0; font-size: 11pt; }
-  .title-section .inv-date { text-align: right; font-size: 11pt; line-height: 2; }
+  .title-section {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 16px;
+  }
+  .title-section h1 { margin: 0 0 4px 0; font-size: 28pt; font-weight: bold; letter-spacing: 3px; }
+  .title-section .inv-no { margin: 0; font-size: 10pt; }
+  .title-section .inv-date { text-align: right; font-size: 10pt; line-height: 1.8; }
 
   /* 开单给 */
-  .address-section { margin-bottom: 22px; }
-  .address-block { line-height: 1.9; font-size: 11pt; }
+  .address-section { margin-bottom: 16px; }
+  .address-block { line-height: 1.7; font-size: 10pt; }
 
   /* 明细表格 */
-  table { width: 100%; border-collapse: collapse; margin-bottom: 22px; font-size: 11pt; }
-  table th, table td { padding: 11px 12px; text-align: left; border-bottom: 1px solid #ddd; }
-  table th { background-color: #f9f9f9; font-weight: 600; font-size: 11pt; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10pt; }
+  table th, table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #ddd; }
+  table th { background-color: #f9f9f9; font-weight: 600; }
 
-  /* 底部：付款方式 + 合计+公章 */
-  .bottom-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
-  .payment-mode-box { border: 1px solid #ddd; padding: 14px 16px; width: 40%; border-radius: 5px; line-height: 1.9; font-size: 11pt; }
-  .totals-area { width: 44%; font-size: 11pt; position: relative; }
-  .total-line { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #eee; }
+  /* 底部两栏 */
+  .bottom-section { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .payment-mode-box { border: 1px solid #ddd; padding: 10px 12px; width: 40%; border-radius: 5px; line-height: 1.7; font-size: 10pt; }
+  .totals-area { width: 45%; font-size: 10pt; }
+  .total-line { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
+
+  /*
+   * 合计行：3列 flexbox（左=合计Total | 中=公章 | 右=金额）
+   * ⚠️ 必须保持此结构，WeasyPrint 唯一可靠的公章居中方案
+   */
   .grand-total {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 0; font-weight: bold;
-    border-top: 2px solid #333; margin-top: 4px; font-size: 13pt;
-    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-weight: bold;
+    border-top: 2px solid #333;
+    margin-top: 3px;
+    font-size: 11.5pt;
   }
-  /* 公章叠在合计行上，居中，不遮文字 */
-  .stamp-on-total {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 100px;
-    opacity: 0.82;
+  .grand-total .stamp-cell {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .grand-total .stamp-cell img {
+    width: 88px;
+    opacity: 0.85;
     mix-blend-mode: multiply;
-    pointer-events: none;
   }
 
   /* 付款资料 */
-  .payment-details { line-height: 2; padding-top: 18px; border-top: 1px solid #eee; font-size: 11pt; }
+  .payment-details { line-height: 1.6; padding-top: 14px; border-top: 1px solid #eee; font-size: 10pt; }
 </style>
 </head>
 <body>
@@ -62,14 +80,14 @@
 <!-- 顶部：公司信息 + Logo -->
 <div class="header">
   <div class="company-info">
-    <strong style="font-size:12pt;">HONGKONG BLUE HEALTH MANAGEMENT LIMITED</strong><br>
+    <strong style="font-size:11pt;">HONGKONG BLUE HEALTH MANAGEMENT LIMITED</strong><br>
     香港蔚藍健康管理有限公司<br>
     No.963 9/F., GOOD HOPE BUILDING,<br>
     618 NATHAN ROAD, KOWLOON, Hong Kong
   </div>
   {% if logo_src %}
   <div>
-    <img src="{{ logo_src }}" alt="Blue Medicine Logo" style="width:160px; height:auto;" />
+    <img src="{{ logo_src }}" alt="Blue Medicine Logo" style="width:140px; height:auto;" />
   </div>
   {% endif %}
 </div>
@@ -89,10 +107,9 @@
 <div class="address-section">
   <div class="address-block">
     <strong>Bill To / 开单给</strong><br>
-    <span style="color:#0066cc;font-size:12pt;"><strong>Purecise (Hong Kong) Health Management Limited</strong></span><br>
+    <span style="color:#0066cc;font-weight:bold;">Purecise (Hong Kong) Health Management Limited</span><br>
     <span style="color:#0066cc;">倍賽思（香港）健康管理有限公司</span><br>
-    UNIT 1021, BEVERLEY COMMERCIAL CENTRE, 87-105 CHATHAM ROAD SOUTH,<br>
-    TSIM SHA TSUI, KOWLOON, HONG KONG
+    UNIT 1021, BEVERLEY COMMERCIAL CENTRE, 87-105 CHATHAM ROAD SOUTH, TSIM SHA TSUI, KOWLOON, HONG KONG
   </div>
 </div>
 
@@ -101,10 +118,10 @@
   <thead>
     <tr>
       <th style="width:5%;">#</th>
-      <th style="width:53%;">描述 Description</th>
+      <th style="width:55%;">描述 Description</th>
       <th style="width:10%; text-align:right;">数量 Qty</th>
-      <th style="width:16%; text-align:right;">单价 Unit Price</th>
-      <th style="width:16%; text-align:right;">金额 Amount</th>
+      <th style="width:15%; text-align:right;">单价 Unit Price</th>
+      <th style="width:15%; text-align:right;">金额 Amount</th>
     </tr>
   </thead>
   <tbody>
@@ -121,7 +138,7 @@
 <!-- 付款方式 + 合计 -->
 <div class="bottom-section">
   <div class="payment-mode-box">
-    <p style="margin:0 0 8px 0; font-weight:bold; font-size:11pt;">Payment Mode / 付款方式</p>
+    <p style="margin:0 0 6px 0; font-weight:bold;">Payment Mode / 付款方式</p>
     <div style="display:flex; justify-content:space-between;">
       <span>方式</span>
       <span>汇丰银行转账（HSBC Transfer）</span>
@@ -137,12 +154,17 @@
       <span>税 Tax (0%)</span>
       <span>0.00</span>
     </div>
-    <!-- 合计行 + 公章叠加在中间 -->
+    <!--
+      公章在合计行中间：3列 flexbox，绝不使用 position/transform
+      WeasyPrint 唯一可靠方案，禁止改动此结构
+    -->
     <div class="grand-total">
       <span>合计 Total</span>
-      {% if stamp_src %}
-      <img src="{{ stamp_src }}" class="stamp-on-total" alt="公章" />
-      {% endif %}
+      <div class="stamp-cell">
+        {% if stamp_src %}
+        <img src="{{ stamp_src }}" alt="公章" />
+        {% endif %}
+      </div>
       <span>RMB ¥ {{ "%.2f"|format(settlement.net_supply_rmb) }}</span>
     </div>
   </div>

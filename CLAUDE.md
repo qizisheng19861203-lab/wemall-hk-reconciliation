@@ -170,11 +170,42 @@ git add . && git commit -m "描述" && git push
 - `main.py` 的 `/health` 接口从 `Path(__file__).parent`（即 `/app/app/`）读取这两个文件
 - 版本格式：`#63 (c0abcd5)`，显示北京时间 CST
 
-### PDF 生成（weasyprint）
-- 使用 weasyprint==60.2 + pydyf==0.8.0（**必须同时锁定两个版本**）
+### PDF 生成（weasyprint）⚠️ 重要约束，禁止违反
+
+**版本锁定（不可更改）：**
+- `weasyprint==60.2` + `pydyf==0.8.0`（必须同时锁定，见 requirements.txt）
 - weasyprint 62.x 有 transform bug；pydyf 0.9+ 与 weasyprint 60.2 API 不兼容
-- PDF 下载用 fetch + Authorization Bearer header，不用 URL 参数传 token
+
+**WeasyPrint CSS 限制（血泪教训）：**
+- ❌ **绝对禁止用 `transform: translate()` 或任何 transform** — WeasyPrint 不支持，图片会直接消失
+- ❌ 不要用 `position: absolute` + `left/top` 百分比 + transform 居中
+- ✅ **公章居中唯一可靠方案：3列 flexbox**，结构固定如下：
+  ```html
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <span>合计 Total</span>
+    <div style="flex:1; display:flex; justify-content:center;">
+      <img src="{{ stamp_src }}" style="width:88px; opacity:0.85; mix-blend-mode:multiply;" />
+    </div>
+    <span>RMB ¥ {{ amount }}</span>
+  </div>
+  ```
+- ✅ detail.html 的每页公章用 `position: fixed; bottom: 0.6cm; right: 1.2cm;`（固定在页面底部，这个有效）
+
+**Invoice 必须1页约束：**
+- `@page margin: 1.2cm 1.5cm`（不可超过这个）
+- `font-size: 10.5pt`，`line-height: 1.45`
+- 如果超过1页，先缩小 font-size 或 line-height，不要改内容
+
+**HTTP Response Header 文件名：**
+- ❌ 禁止在 `Content-Disposition: filename=` 里写中文（latin-1 报 UnicodeEncodeError）
+- ✅ header 只写 ASCII 文件名，如 `filename=Invoices-2026.zip`
+- ✅ ZIP 内的文件名可以有中文（zf.writestr(中文名, content) 没问题）
+
+**其他：**
+- PDF 下载用 fetch + `Authorization: Bearer` header，不用 URL 参数传 token
 - 手动触发自动结算需传 `force=true` 参数
+- static/logo.jpg 和 static/seal.png 已在仓库中（.gitignore 用 `static/*` + `!static/seal.png` 例外）
+- 服务器 static 路径：`/opt/wemall-hk/static/`，挂载到容器 `/app/static/`
 
 ### 部署流程
 - **前端**：在本地 Mac 执行 `npm run build`，再 rsync dist/ 到服务器（服务器不跑 npm）
