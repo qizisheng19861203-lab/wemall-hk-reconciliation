@@ -234,5 +234,196 @@ RUN printf 'Types: deb\nURIs: http://mirrors.tencent.com/debian\nSuites: trixie 
 - [x] GitHub Actions 自动部署已配置
 - [x] 版本号显示修复（BUILD_NUMBER/COMMIT_SHA 写入正确路径）
 - [x] PDF 下载修复（weasyprint==60.2 + pydyf==0.8.0）
+- [x] 邮件通知已配置（QQ邮箱 SMTP，见下方）
+- [x] FPS 转数快收款码已嵌入账单（FPS ID: 9711102）
 - [ ] 上传公章图片到 `static/seal.png`（发票PDF会显示）
-- [ ] 申请腾讯云短信模板（结算通知用）
+- [ ] 申请腾讯云短信模板（结算通知用，当前已改用免费邮件）
+
+---
+
+## 邮件通知（SMTP）
+
+### 配置（已在服务器 .env 配置完毕）
+```
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=332771759@qq.com
+SMTP_PASSWORD=yvsnqorvfjfqcafi   # QQ邮箱授权码
+SMTP_USE_SSL=true
+SMTP_FROM_NAME=香港蔚蓝健康
+```
+
+### 发件人显示名中文编码 ⚠️ 重要
+QQ邮箱要求 From 头必须符合 RFC2047，中文名称必须用 Header 编码，**否则550拒绝**：
+```python
+from email.header import Header
+from email.utils import formataddr
+
+# ✅ 正确写法
+msg['From'] = formataddr((str(Header(settings.SMTP_FROM_NAME, 'utf-8')), settings.SMTP_USER))
+msg['Subject'] = Header(subject, 'utf-8')
+
+# ❌ 错误写法（直接拼字符串，QQ邮箱550报错）
+msg['From'] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USER}>"
+```
+
+### 邮件功能说明
+- 文件：`backend/app/services/email_service.py`
+- 每次发邮件附带 **Invoice PDF + 明细 PDF** 两个附件
+- 邮件正文内嵌账单 HTML（可直接在邮件里看到账单内容）
+- 手动触发：结算管理页面「发邮件」按钮
+- 自动触发：每月自动结算后自动发送
+- 收件人：通知号码管理页面中填写了邮箱的启用联系人
+
+---
+
+## FPS 转数快收款码
+
+### 基本信息
+- 公司：HONGKONG BLUE HEALTH MANAGEMENT LIMITED
+- FPS ID：**9711102**（汇丰香港港元储蓄账户，040-259236-838）
+- 代码：`backend/app/utils/fps_qr.py`
+
+### 生成原理
+遵循 HKMA/EMVCo 标准，用 FPS ID 构建 QR payload，CRC-16/CCITT-FALSE 校验：
+```python
+from app.utils.fps_qr import fps_qr_base64
+uri = fps_qr_base64("9711102", "BLUE HEALTH MANAGEMENT")
+# 返回 data:image/png;base64,... 可直接用于 <img src="...">
+```
+已嵌入 invoice.html 模板底部，PDF 和邮件 HTML 均显示。
+
+---
+
+## ⚠️ Vue 前端导航冻结问题（已修复，请勿回退）
+
+### 问题根因
+Element Plus 的 `el-dialog` 默认 `teleported=true`，会把遮罩层 append 到 `<body>`。
+当用户**在 dialog/loading 状态时切换页面**，Vue 销毁组件但 `<body>` 里的遮罩层 `.el-overlay` 残留，
+导致整个页面所有点击都被该透明遮罩拦截，表现为"点了没有任何反应"。
+
+### 三层修复方案（缺一不可）
+
+**第一层：路由全局清理**（`frontend/src/router/index.js`）
+```js
+import { nextTick } from 'vue'
+router.afterEach(() => {
+  nextTick(() => {
+    // 移除导航后残留的孤立遮罩
+    document.querySelectorAll('.el-overlay').forEach(el => {
+      const hasVisibleDialog = el.querySelector('.el-dialog, .el-message-box')
+      if (!hasVisibleDialog) el.remove()
+    })
+    document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
+      if (!el.closest('[data-v]') && el.parentNode === document.body) el.remove()
+    })
+  })
+})
+```
+
+**第二层：所有 `el-dialog` 加 `:teleported="false"`**
+dialog 绑定到组件 DOM 树，随组件销毁自动清理：
+```html
+<!-- ✅ 正确：随组件销毁 -->
+<el-dialog v-model="dialog" :teleported="false">
+
+<!-- ❌ 错误：遮罩残留在 body -->
+<el-dialog v-model="dialog">
+```
+已修复的文件：Settlements.vue / Orders.vue / Products.vue / Users.vue / ExchangeRates.vue / NotificationContacts.vue / Layout.vue
+
+**第三层：`onBeforeUnmount` 重置所有状态**
+每个有 loading 或 dialog 的页面都要加：
+```js
+import { onBeforeUnmount } from 'vue'
+onBeforeUnmount(() => {
+  loading.value = false
+  dialog.value = false
+  // Settlements.vue 还需要关闭发邮件的全局 ElMessage
+  _emailLoadingMsg?.close()
+})
+```
+
+### `el-date-picker` 的类似问题
+date-range picker 选了第一个日期后会等待第二个日期，期间有透明遮罩。
+修复方式：加 `:teleported="true"`（注意 date-picker 和 dialog 方向相反）：
+```html
+<el-date-picker type="daterange" :teleported="true" />
+```
+
+### `ElMessage` duration:0 注意事项
+用 `ElMessage({ duration: 0 })` 创建的持久消息，**必须**：
+1. 在 try/catch/finally 里都调用 `.close()`
+2. 把实例存到组件级变量，在 `onBeforeUnmount` 里也调用 `.close()`
+3. 加 `showClose: true`，让用户可以手动关闭（兜底）
+
+---
+
+## 服务器 Git 更新注意事项
+
+### 服务器上有本地修改时 git pull 会报错
+```bash
+error: Your local changes to the following files would be overwritten by merge
+```
+**解决：先 checkout 丢弃本地改动，再 pull**
+```bash
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
+  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose ..."
+```
+不要用 `git stash`（stash 内容会堆积），直接 `git checkout -- .` 丢弃即可（服务器不做开发，改动不重要）。
+
+### 标准部署命令
+```bash
+# 只改了后端代码（不改 requirements.txt）
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
+  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose restart backend"
+
+# 改了前端代码
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
+  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose up -d --build frontend"
+
+# 改了 requirements.txt（需重建后端镜像）
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
+  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose up -d --build backend"
+
+# 同时改了前后端
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
+  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose restart backend && docker compose up -d --build frontend"
+```
+
+### 数据库直接操作
+```bash
+# 获取 DB 密码
+ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 "grep MYSQL_ROOT_PASSWORD /opt/wemall-hk/.env"
+# 密码：ddfc08334c84d99d5e16831daf6ac2a9
+
+# 连接 MySQL
+docker exec wemall-hk-db-1 mysql -uroot -pddfc08334c84d99d5e16831daf6ac2a9 wemall_hk
+
+# MySQL 不支持 ADD COLUMN IF NOT EXISTS，要用 try/except 或先检查：
+# Python 方式（main.py startup migration）：
+try:
+    conn.execute(text("ALTER TABLE xxx ADD COLUMN yyy VARCHAR(200) NULL"))
+except Exception:
+    pass  # 列已存在
+conn.commit()
+```
+
+---
+
+## 通知联系人（notification_contacts 表）
+
+### 表结构
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INT PK | |
+| name | VARCHAR(100) NOT NULL | 联系人姓名 |
+| phone | VARCHAR(20) NULL | 手机号（选填，11位国内号码） |
+| email | VARCHAR(200) NULL | 邮箱（必填，用于收账单） |
+| is_active | BOOLEAN | 是否启用 |
+| created_at | DATETIME | |
+
+### 注意
+- `phone` 已改为 NULL（之前是 NOT NULL，已通过 ALTER TABLE 修改）
+- `email` 是后来加的列，main.py 启动时有迁移脚本自动添加
+- 前端邮箱输入有域名自动补全：@qq.com / @163.com / @126.com / @gmail.com 等
