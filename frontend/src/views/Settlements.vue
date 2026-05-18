@@ -239,6 +239,7 @@ const yearLoading = reactive({ invoice: false, detail: false })
 const downloadingId = ref('')   // 单个下载时记录 `${id}-${type}`
 const notifyingId = ref(null)   // 发短信时记录 id
 const emailingId = ref('')       // 发邮件时记录 id
+let _emailLoadingMsg = null      // 发邮件时的全局 loading 提示，切页时关闭
 
 // 年度下载
 const currentYear = new Date().getFullYear()
@@ -545,22 +546,24 @@ async function sendNotify(id) {
 async function sendEmail(id) {
   if (emailingId.value === id) return
   emailingId.value = id
-  const loadingMsg = ElMessage({
-    message: '正在生成账单并发送邮件，请稍候（约10-20秒）…',
+  _emailLoadingMsg = ElMessage({
+    message: '正在生成账单并发送邮件（含Invoice+明细），请稍候约10-20秒…',
     type: 'info',
     duration: 0,
-    showClose: false,
+    showClose: true,
   })
   try {
-    const res = await settlementsApi.sendEmail(id)
-    loadingMsg.close()
+    const res = await settlementsApi.sendEmail(id, true)   // include_detail=true
+    _emailLoadingMsg?.close()
+    _emailLoadingMsg = null
     if (res.sent > 0) {
       ElMessage.success(`✅ 邮件已成功发送给 ${res.sent} 位联系人`)
     } else {
       ElMessage.warning(res.error || '没有可用的邮件联系人，请在通知号码管理中填写邮箱')
     }
   } catch (e) {
-    loadingMsg.close()
+    _emailLoadingMsg?.close()
+    _emailLoadingMsg = null
     ElMessage.error(e.message || '邮件发送失败')
   } finally {
     emailingId.value = ''
@@ -593,6 +596,8 @@ onBeforeUnmount(() => {
   notifyingId.value = null
   emailingId.value = ''
   downloadProgress.show = false
+  _emailLoadingMsg?.close()
+  _emailLoadingMsg = null
 })
 
 onMounted(load)

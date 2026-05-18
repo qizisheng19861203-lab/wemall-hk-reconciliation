@@ -72,7 +72,7 @@
     </el-card>
 
     <!-- 添加/编辑弹窗 -->
-    <el-dialog v-model="formDialog" :title="editingId ? '编辑联系人' : '添加通知联系人'" width="460px">
+    <el-dialog v-model="formDialog" :title="editingId ? '编辑联系人' : '添加通知联系人'" width="460px" :teleported="false">
       <el-form :model="form" label-width="100px" style="margin-top:8px">
         <el-form-item label="姓名" required>
           <el-input v-model="form.name" placeholder="如：张总、运营小王" maxlength="50" show-word-limit />
@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { notificationContacts as contactsApi } from '@/api'
@@ -234,5 +234,6 @@ async function removeContact(id) {
   }
 }
 
+onBeforeUnmount(() => { loading.value = false; formDialog.value = false })
 onMounted(load)
 </script>

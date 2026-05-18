@@ -24,7 +24,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialog" title="手动录入汇率" width="380px">
+    <el-dialog v-model="dialog" title="手动录入汇率" width="380px" :teleported="false">
       <el-form :model="form" label-width="140px">
         <el-form-item label="日期"><el-date-picker v-model="form.date" value-format="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="1 HKD = ? CNY"><el-input-number v-model="form.hkd_to_cny" :precision="4" :min="0" /></el-form-item>
@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { rates as ratesApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -79,5 +79,6 @@ async function save() {
   finally { saving.value = false }
 }
 
+onBeforeUnmount(() => { loading.value = false; saving.value = false; dialog.value = false })
 onMounted(load)
 </script>

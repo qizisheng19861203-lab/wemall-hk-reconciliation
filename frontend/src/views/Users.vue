@@ -31,7 +31,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialog" :title="editingId ? '编辑用户' : '新增用户'" width="440px">
+    <el-dialog v-model="dialog" :title="editingId ? '编辑用户' : '新增用户'" width="440px" :teleported="false">
       <el-form :model="form" label-width="80px">
         <el-form-item label="用户名" v-if="!editingId" required><el-input v-model="form.username" /></el-form-item>
         <el-form-item label="密码" v-if="!editingId" required><el-input v-model="form.password" type="password" /></el-form-item>
@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { users as usersApi } from '@/api'
 import http from '@/api/http'
@@ -121,5 +121,6 @@ async function toggleActive(row) {
   } catch (e) { ElMessage.error(e.message) }
 }
 
+onBeforeUnmount(() => { loading.value = false; dialog.value = false })
 onMounted(load)
 </script>

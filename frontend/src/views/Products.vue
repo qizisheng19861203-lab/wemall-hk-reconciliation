@@ -58,7 +58,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px">
+    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" :teleported="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="产品名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { products as productsApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -192,5 +192,6 @@ function handleImportError(error) {
   ElMessage.error(msg)
 }
 
+onBeforeUnmount(() => { loading.value = false; dialog.value = false })
 onMounted(load)
 </script>

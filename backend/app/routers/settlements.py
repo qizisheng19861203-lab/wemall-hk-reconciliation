@@ -255,7 +255,7 @@ def year_detail_zip(
 @router.post("/{settlement_id}/send-email")
 def send_settlement_email_route(
     settlement_id: int,
-    include_detail: bool = False,
+    include_detail: bool = True,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -497,7 +497,9 @@ def auto_settle_period(
             if contacts:
                 to_emails = [c.email for c in contacts]
                 invoice_pdf = generate_invoice_pdf(settlement)
-                email_result = send_settlement_email(to_emails, settlement, invoice_pdf)
+                detail_orders = db.query(Order).filter(Order.settlement_id == settlement.id).all()
+                detail_pdf = generate_detail_pdf(settlement, detail_orders)
+                email_result = send_settlement_email(to_emails, settlement, invoice_pdf, detail_pdf)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Auto-send email failed: {e}")
