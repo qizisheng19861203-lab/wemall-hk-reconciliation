@@ -66,6 +66,16 @@ async def sync_orders(
                     existing.shipping_status = shipping_status
                     if shipping_status == ShippingStatus.returned:
                         existing.is_refunded = True
+                    # 如果已有订单的商品条目缺少零售价，也补录上
+                    if items_list and existing.items:
+                        for ex_item in existing.items:
+                            if ex_item.retail_price is None or float(ex_item.retail_price) == 0:
+                                for item_data in items_list:
+                                    if str(item_data.get("skuId", "")) == (ex_item.sku or ""):
+                                        rp = float(item_data.get("salePrice") or item_data.get("skuPrice") or item_data.get("goodsPrice") or 0)
+                                        if rp > 0:
+                                            ex_item.retail_price = rp
+                                        break
                     updated += 1
                     continue
 
@@ -91,7 +101,9 @@ async def sync_orders(
                     product = db.query(Product).filter(Product.wemall_product_id == goods_id).first() if goods_id else None
 
                     qty = int(item_data.get("skuNum", 1))
-                    retail_price = float(item_data.get("salePrice", 0))
+                    # 尝试多个价格字段名（微盟API字段名可能不同）
+                    _rp_raw = item_data.get("salePrice") or item_data.get("skuPrice") or item_data.get("goodsPrice") or 0
+                    retail_price = float(_rp_raw) if _rp_raw else None
                     supply_price = product.supply_price if product else None
                     supply_subtotal = (supply_price * qty) if supply_price else None
 

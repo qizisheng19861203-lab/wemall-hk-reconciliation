@@ -9,6 +9,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
   const isAdminOrOperator = computed(() => ['admin', 'operator'].includes(user.value?.role))
+  // 所有登录用户（包括分销商）均可查看和下载PDF
+  const canDownload = computed(() => !!token.value)
 
   async function login(username, password) {
     const res = await authApi.login({ username, password })
@@ -25,5 +27,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-  return { user, token, isLoggedIn, isAdmin, isAdminOrOperator, login, logout }
+  return { user, token, isLoggedIn, isAdmin, isAdminOrOperator, canDownload, login, logout }
 })

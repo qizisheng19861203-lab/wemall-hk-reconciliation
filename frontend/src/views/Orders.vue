@@ -111,26 +111,26 @@
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="flatRows" v-loading="loading" stripe :span-method="spanMethod" border>
+      <el-table :data="flatRows" v-loading="loading" stripe :span-method="spanMethod" border style="font-size:14px">
         <el-table-column prop="wemall_order_id" label="订单号" width="165" />
         <el-table-column label="下单日期" width="100">
           <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
         </el-table-column>
-        <el-table-column label="商品名称" min-width="220">
+        <el-table-column label="商品名称" min-width="150">
           <template #default="{ row }">
-            <span style="font-size:12px">{{ row._item.product_name }}</span>
+            {{ row._item.product_name }}
           </template>
         </el-table-column>
         <el-table-column label="数量" width="55" align="center">
           <template #default="{ row }">{{ row._item.quantity }}</template>
         </el-table-column>
-        <el-table-column label="供货单价(RMB)" width="120" align="right">
+        <el-table-column label="供货单价(RMB)" width="130" align="right">
           <template #default="{ row }">
             <span v-if="row._item.supply_price" style="color:#409EFF">¥{{ Number(row._item.supply_price).toFixed(2) }}</span>
             <el-tag v-else type="danger" size="small">待录价</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="供货小计(RMB)" width="120" align="right">
+        <el-table-column label="供货小计(RMB)" width="130" align="right">
           <template #default="{ row }">
             <span v-if="row._item.supply_subtotal" :class="{ 'text-red': row.is_refunded }">
               ¥{{ Number(row._item.supply_subtotal).toFixed(2) }}
@@ -138,26 +138,21 @@
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="客户支付(RMB)" width="120" align="right">
+        <el-table-column label="客户支付(RMB)" width="130" align="right">
           <template #default="{ row }">
-            <span v-if="row._item.retail_price" style="color:#909399">
+            <span v-if="row._item.retail_price != null && Number(row._item.retail_price) > 0" style="color:#606266">
               ¥{{ (Number(row._item.retail_price) * row._item.quantity).toFixed(2) }}
             </span>
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="发货状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusType[row.shipping_status]" size="small">{{ statusLabel[row.shipping_status] }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="退款" width="80" align="center">
+        <el-table-column label="退款" width="90" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.is_refunded" type="danger" size="small">¥{{ row.refund_amount }}</el-tag>
-            <span v-else>-</span>
+            <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="结算" width="75" align="center">
+        <el-table-column label="结算" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.settlement_id" type="success" size="small">已结算</el-tag>
             <el-tag v-else type="info" size="small">未结算</el-tag>
@@ -248,9 +243,6 @@ const filter = reactive({
   unsettled_only: false,
   keyword: '',
 })
-
-const statusLabel = { pending: '待发货', shipped: '已发货', delivered: '已签收', returned: '已退货' }
-const statusType = { pending: 'warning', shipped: 'primary', delivered: 'success', returned: 'danger' }
 
 const lastRefreshText = computed(() => {
   if (!lastRefreshTime.value) return ''
@@ -348,9 +340,9 @@ const flatRows = computed(() => {
   return rows
 })
 
-// 列索引: 订单号[0] 日期[1] 商品名[2] 数量[3] 供货单价[4] 供货小计[5] 客户支付[6] 发货状态[7] 退款[8] 结算[9] 操作[10]
-// 合并整订单行的列（跨商品条目合并）：订单号、日期、发货状态、退款、结算、操作
-const MERGE_COLS = [0, 1, 7, 8, 9, 10]
+// 列索引: 订单号[0] 日期[1] 商品名[2] 数量[3] 供货单价[4] 供货小计[5] 客户支付[6] 退款[7] 结算[8] 操作[9]
+// 合并整订单行的列（跨商品条目合并）：订单号、日期、退款、结算、操作
+const MERGE_COLS = [0, 1, 7, 8, 9]
 function spanMethod({ rowIndex, columnIndex }) {
   if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
   const row = flatRows.value[rowIndex]
