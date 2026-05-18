@@ -39,14 +39,15 @@
           <el-button size="small" :type="quickMode==='lastSecondHalf' ? 'primary' : ''" @click="setQuickRange('lastSecondHalf')">上月16-月底</el-button>
         </el-button-group>
         <el-date-picker v-model="filter.monthPicker" type="month" placeholder="按月选择"
-          style="width:140px" @change="onMonthPick" />
+          style="width:140px" @change="onMonthPick" :teleported="true" />
         <el-date-picker v-model="filter.dateRange" type="daterange" range-separator="~"
           start-placeholder="自定义开始" end-placeholder="自定义结束"
-          value-format="YYYY-MM-DDTHH:mm:ss" style="width:280px" @change="onDateRangeChange" />
+          value-format="YYYY-MM-DDTHH:mm:ss" style="width:280px" @change="onDateRangeChange"
+          :teleported="true" />
       </div>
 
       <!-- 区间结算概览 -->
-      <div v-if="periodStats.loaded" style="margin-top:12px;padding:10px 14px;background:#f5f7fa;border-radius:6px;display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <div v-if="periodStats.loaded" style="margin-top:12px;padding:10px 14px;background:#f5f7fa;border-radius:6px;display:flex;align-items:center;gap:20px;flex-wrap:wrap">
         <span style="font-size:12px;color:#909399;font-weight:500">{{ periodRangeLabel }} 区间：</span>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;color:#606266">供货总额</span>
@@ -54,13 +55,18 @@
         </div>
         <div style="width:1px;height:20px;background:#dcdfe6"></div>
         <div style="display:flex;align-items:center;gap:6px">
-          <el-tag type="success" size="small">已结算</el-tag>
-          <span style="font-size:14px;font-weight:600;color:#67c23a">¥{{ periodStats.settled_rmb.toFixed(2) }}</span>
+          <el-tag type="success" size="small">已收款</el-tag>
+          <span style="font-size:14px;font-weight:600;color:#67c23a">¥{{ periodStats.confirmed_settled_rmb.toFixed(2) }}</span>
+        </div>
+        <div v-if="periodStats.pending_settlement_rmb > 0" style="display:flex;align-items:center;gap:6px">
+          <el-tag type="primary" size="small">结算中</el-tag>
+          <span style="font-size:14px;font-weight:600;color:#409EFF">¥{{ periodStats.pending_settlement_rmb.toFixed(2) }}</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <el-tag type="warning" size="small">未结算</el-tag>
           <span style="font-size:14px;font-weight:600;color:#e6a23c">¥{{ periodStats.unsettled_rmb.toFixed(2) }}</span>
         </div>
+        <div style="width:1px;height:20px;background:#dcdfe6"></div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:12px;color:#909399">订单数</span>
           <span style="font-size:14px;font-weight:600;color:#606266">{{ periodStats.total_orders }}</span>
@@ -225,7 +231,7 @@ const lastRefreshTime = ref(null)
 const quickMode = ref('month')
 
 const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0 })
-const periodStats = reactive({ loaded: false, total_supply_rmb: 0, settled_rmb: 0, unsettled_rmb: 0, total_orders: 0 })
+const periodStats = reactive({ loaded: false, total_supply_rmb: 0, confirmed_settled_rmb: 0, pending_settlement_rmb: 0, unsettled_rmb: 0, total_orders: 0 })
 
 const periodRangeLabel = computed(() => {
   const r = filter.dateRange
@@ -392,11 +398,10 @@ async function loadPeriodStats() {
   }
   try {
     const res = await ordersApi.stats({ start_date: filter.dateRange[0], end_date: filter.dateRange[1] })
-    const total = res.total_supply_rmb ?? 0
-    const unsettled = res.unsettled_rmb ?? 0
-    periodStats.total_supply_rmb = total
-    periodStats.unsettled_rmb = unsettled
-    periodStats.settled_rmb = Math.max(0, total - unsettled)
+    periodStats.total_supply_rmb = res.total_supply_rmb ?? 0
+    periodStats.unsettled_rmb = res.unsettled_rmb ?? 0
+    periodStats.confirmed_settled_rmb = res.confirmed_settled_rmb ?? 0
+    periodStats.pending_settlement_rmb = Math.max(0, res.pending_settlement_rmb ?? 0)
     periodStats.total_orders = res.total_orders ?? 0
     periodStats.loaded = true
   } catch (e) {

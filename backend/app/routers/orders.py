@@ -78,22 +78,44 @@ def get_order_stats(
     if end_date:
         q = q.filter(Order.order_date <= end_date)
 
+    from app.models.settlement import Settlement, SettlementStatus
+
     orders = q.options(joinedload(Order.items)).all()
     total_supply = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
         for o in orders if not o.is_refunded
     )
     total_refund = sum(o.refund_amount or 0 for o in orders if o.is_refunded)
+
+    # 未结算：没有 settlement_id 的订单
     unsettled = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
         for o in orders if not o.is_refunded and not o.settlement_id
     )
+
+    # 已确认收款（真正结清）：settlement.status = 'settled'
+    settlement_ids = list({o.settlement_id for o in orders if o.settlement_id})
+    confirmed_ids = set()
+    if settlement_ids:
+        confirmed_ids = {
+            s.id for s in db.query(Settlement.id)
+            .filter(Settlement.id.in_(settlement_ids), Settlement.status == SettlementStatus.settled)
+            .all()
+        }
+    confirmed_settled = sum(
+        sum(item.supply_subtotal or 0 for item in o.items)
+        for o in orders if not o.is_refunded and o.settlement_id in confirmed_ids
+    )
+
     return {
         "total_orders": len(orders),
         "total_supply_rmb": float(total_supply),
         "total_refund_rmb": float(total_refund),
         "net_supply_rmb": float(total_supply - total_refund),
         "unsettled_rmb": float(unsettled),
+        "confirmed_settled_rmb": float(confirmed_settled),
+        # 在结算单中但未确认收款
+        "pending_settlement_rmb": float(total_supply - unsettled - confirmed_settled),
     }
 
 
