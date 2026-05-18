@@ -481,6 +481,28 @@ def auto_settle_period(
     db.commit()
     db.refresh(settlement)
 
+    # Auto-send email if SMTP is configured
+    email_result = None
+    try:
+        from app.config import settings
+        from app.services.email_service import send_settlement_email
+        from app.services.pdf_generator import generate_invoice_pdf
+        from app.models.notification_contact import NotificationContact
+        if settings.SMTP_HOST and settings.SMTP_USER:
+            contacts = db.query(NotificationContact).filter(
+                NotificationContact.is_active == True,
+                NotificationContact.email.isnot(None),
+                NotificationContact.email != "",
+            ).all()
+            if contacts:
+                to_emails = [c.email for c in contacts]
+                invoice_pdf = generate_invoice_pdf(settlement)
+                email_result = send_settlement_email(to_emails, settlement, invoice_pdf)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Auto-send email failed: {e}")
+        email_result = {"sent": 0, "error": str(e)}
+
     return {
         "message": "自动结算成功",
         "settlement_id": settlement.id,
@@ -488,4 +510,5 @@ def auto_settle_period(
         "order_count": len(orders),
         "total_rmb": float(total_supply),
         "payment_hkd": float(payment_hkd),
+        "email_result": email_result,
     }

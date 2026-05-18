@@ -6,8 +6,38 @@ from email.mime.text import MIMEText
 from email import encoders
 from app.config import settings
 import logging
+import os
+import base64
 
 logger = logging.getLogger(__name__)
+
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "static")
+
+
+def _get_image_base64(filename: str, mime: str = "image/png") -> str:
+    """读取图片并转为 base64 data URI"""
+    path = os.path.join(STATIC_DIR, filename)
+    try:
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read()).decode()
+        return f"data:{mime};base64,{data}"
+    except Exception:
+        return ""
+
+
+def render_invoice_html(settlement) -> str:
+    """渲染 invoice.html 模板为 HTML 字符串（不转PDF，用于邮件正文）"""
+    from jinja2 import Environment, FileSystemLoader
+    from datetime import datetime
+    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+    template = env.get_template("invoice.html")
+    return template.render(
+        settlement=settlement,
+        now=datetime.now(),
+        stamp_src=_get_image_base64("seal.png", "image/png"),
+        logo_src=_get_image_base64("logo.jpg", "image/jpeg"),
+    )
 
 
 def send_settlement_email(
@@ -16,37 +46,44 @@ def send_settlement_email(
     invoice_pdf: bytes,
     detail_pdf: bytes = None,
 ) -> dict:
-    """发送结算账单邮件（附件含invoice PDF，可选附明细PDF）"""
+    """发送结算账单邮件（HTML正文含账单预览，附件含invoice PDF，可选附明细PDF）"""
     if not to_emails:
         return {"sent": 0, "skipped": 0, "error": "no recipients"}
     if not settings.SMTP_HOST or not settings.SMTP_USER:
         return {"sent": 0, "skipped": len(to_emails), "error": "SMTP未配置"}
 
-    period_start = settlement.period_start.strftime('%Y年%m月%d日')
-    period_end = settlement.period_end.strftime('%Y年%m月%d日')
-    subject = f"结算账单 {settlement.invoice_number} | {period_start} ~ {period_end}"
+    subject = (
+        f"香港蔚蓝健康对账单 "
+        f"{settlement.period_start.year}年{settlement.period_start.month}月{settlement.period_start.day}号"
+        f"-{settlement.period_end.month}月{settlement.period_end.day}号"
+    )
 
-    msg = MIMEMultipart()
+    msg = MIMEMultipart('mixed')
     msg['From'] = f"{settings.SMTP_FROM_NAME} <{settings.SMTP_USER}>"
     msg['To'] = ', '.join(to_emails)
     msg['Subject'] = subject
 
-    body = f"""您好，
+    # Render invoice HTML for email body
+    try:
+        invoice_html = render_invoice_html(settlement)
+    except Exception as e:
+        logger.warning(f"Failed to render invoice HTML for email: {e}")
+        invoice_html = ""
 
-附件为本期结算账单，请查收。
+    period_start_str = settlement.period_start.strftime('%Y年%m月%d日')
+    period_end_str = settlement.period_end.strftime('%Y年%m月%d日')
 
-账期：{period_start} — {period_end}
-Invoice 编号：{settlement.invoice_number}
-净供货额：RMB ¥{float(settlement.net_supply_rmb):.2f}
-应付港币：HK${float(settlement.payment_amount_hkd):.2f}
-订单数：{settlement.order_count}
+    html_body = f"""<html><body>
+<p>您好，请查收香港蔚蓝健康本期对账单。</p>
+<p style="color:#666;font-size:13px;">账期：{period_start_str} — {period_end_str}　|　Invoice 编号：{settlement.invoice_number}</p>
+<hr>
+{invoice_html}
+<hr>
+<p>如有问题请联系我们。</p>
+<p style="color:#999;font-size:12px;">HONGKONG BLUE HEALTH MANAGEMENT LIMITED 香港蔚蓝健康管理有限公司</p>
+</body></html>"""
 
-如有疑问请回复此邮件。
-
-HONGKONG BLUE HEALTH MANAGEMENT LIMITED
-香港蔚蓝健康管理有限公司
-"""
-    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
     # Attach Invoice PDF
     _attach_pdf(msg, invoice_pdf, f"Invoice-{settlement.invoice_number}.pdf")

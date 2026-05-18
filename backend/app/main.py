@@ -17,13 +17,17 @@ import app.models  # ensure all models are imported for table creation
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    # DB migration: add email column to notification_contacts if not exists
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE notification_contacts ADD COLUMN IF NOT EXISTS email VARCHAR(200) NULL COMMENT '邮箱地址'"))
-            conn.commit()
-    except Exception:
-        pass
+    # DB migration: add email column and make phone nullable in notification_contacts
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE notification_contacts ADD COLUMN email VARCHAR(200) NULL COMMENT '邮箱地址'"))
+        except Exception:
+            pass  # column already exists
+        try:
+            conn.execute(text("ALTER TABLE notification_contacts MODIFY COLUMN phone VARCHAR(20) NULL"))
+        except Exception:
+            pass
+        conn.commit()
     start_scheduler()
     yield
     stop_scheduler()
