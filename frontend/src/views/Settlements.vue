@@ -408,7 +408,7 @@ async function downloadPdf(row, type) {
   const key = `${row.id}-${type}`
   if (downloadingId.value === key) return
   downloadingId.value = key
-  showProgress(`正在生成 ${type === 'invoice' ? 'Invoice账单' : '明细PDF'}...`)
+  showProgress(`正在生成 ${type === 'invoice' ? 'Invoice账单' : '明细PDF'}（约8-15秒）...`)
   const token = localStorage.getItem('token')
   const url = type === 'invoice' ? settlementsApi.invoiceUrl(row.id) : settlementsApi.detailUrl(row.id)
   const date = fmtDate(row.period_end)
@@ -417,7 +417,8 @@ async function downloadPdf(row, type) {
     : `OrderDetail+香港蔚蓝+${date}.pdf`
   try {
     const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-    if (!response.ok) throw new Error('下载失败')
+    if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
+    if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
     const a = document.createElement('a')
     a.href = window.URL.createObjectURL(blob)
@@ -429,7 +430,11 @@ async function downloadPdf(row, type) {
     hideProgress()
   } catch (e) {
     hideProgress()
-    ElMessage.error(e.message || 'PDF下载失败')
+    if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+      ElMessage.error('网络连接中断，PDF生成需要约10秒，请稍候重试')
+    } else {
+      ElMessage.error(e.message || 'PDF下载失败')
+    }
   } finally {
     downloadingId.value = ''
   }
@@ -447,10 +452,11 @@ async function batchDownload(type) {
     : settlementsApi.batchDetailUrl(selectedIds.value)
   const filename = type === 'invoice' ? 'Invoices+香港蔚蓝.zip' : 'OrderDetails+香港蔚蓝.zip'
   batchLoading[type] = true
-  showProgress(`正在打包 ${selectedIds.value.length} 个PDF...`)
+  showProgress(`正在打包 ${selectedIds.value.length} 个PDF（每个约8-15秒）...`)
   try {
     const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-    if (!response.ok) throw new Error('批量下载失败')
+    if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
+    if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
     const a = document.createElement('a')
     a.href = window.URL.createObjectURL(blob)
@@ -463,7 +469,11 @@ async function batchDownload(type) {
     ElMessage.success(`已下载 ${selectedIds.value.length} 个PDF`)
   } catch (e) {
     hideProgress()
-    ElMessage.error(e.message || '批量下载失败')
+    if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+      ElMessage.error('网络中断，请勿切换页面，稍候重试')
+    } else {
+      ElMessage.error(e.message || '批量下载失败')
+    }
   } finally {
     batchLoading[type] = false
   }
@@ -482,7 +492,8 @@ async function yearDownload(type) {
   showProgress(`正在打包 ${year} 年全部${type === 'invoice' ? 'Invoice' : '明细'}...`)
   try {
     const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-    if (!response.ok) throw new Error('下载失败')
+    if (response.status === 401) { ElMessage.error('登录已过期，请重新登录'); return }
+    if (!response.ok) throw new Error(`服务器错误 ${response.status}`)
     const blob = await response.blob()
     const a = document.createElement('a')
     a.href = window.URL.createObjectURL(blob)
@@ -495,7 +506,11 @@ async function yearDownload(type) {
     ElMessage.success(`${year} 年全部PDF已下载`)
   } catch (e) {
     hideProgress()
-    ElMessage.error(e.message || '年度下载失败')
+    if (e.name === 'TypeError' && e.message === 'Failed to fetch') {
+      ElMessage.error(`全年打包耗时较长，请勿切换页面，稍候重试（${year}年约需${year === new Date().getFullYear() ? '1-2' : '2-5'}分钟）`)
+    } else {
+      ElMessage.error(e.message || '年度下载失败')
+    }
   } finally {
     yearLoading[type] = false
   }
