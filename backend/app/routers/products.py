@@ -110,7 +110,7 @@ def delete_product(
     if linked_count > 0:
         raise HTTPException(
             status_code=400,
-            detail=f"该产品有 {linked_count} 条订单记录，不能删除。可以将其设为"停用"代替。"
+            detail=f"该产品有 {linked_count} 条订单记录，不能删除。可以将其设为【停用】代替。"
         )
     db.delete(product)
     db.commit()
