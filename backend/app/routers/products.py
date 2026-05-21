@@ -117,14 +117,29 @@ def delete_product(
     return {"message": "删除成功"}
 
 
+def _get_wemall_master_api(db: Session) -> WemallAPI:
+    """始终使用蔚蓝医药主店（id=1）的凭证同步产品，不随激活店铺切换。
+    产品库来源固定为蔚蓝医药，与当前激活店铺无关。"""
+    from app.models.wemall_store_config import WemallStoreConfig
+    master = db.query(WemallStoreConfig).filter(WemallStoreConfig.id == 1).first()
+    if master:
+        return WemallAPI(
+            client_id=master.client_id,
+            client_secret=master.client_secret,
+            shop_id=master.shop_id,
+        )
+    # 兜底：如果找不到 id=1，用激活店铺
+    return WemallAPI()
+
+
 @router.post("/sync-wemall")
 async def sync_products_from_wemall(
     page_limit: int = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """从微盟API同步产品（默认只同步第1页20个产品）"""
-    api = WemallAPI()
+    """从微盟API同步产品（固定使用蔚蓝医药主店凭证，不随激活店铺切换）"""
+    api = _get_wemall_master_api(db)
     created, updated = 0, 0
 
     page = 1
@@ -196,8 +211,8 @@ async def sync_products_by_ids(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """批量同步指定的商品ID（支持商品ID或商品编码）"""
-    api = WemallAPI()
+    """批量同步指定的商品ID（固定使用蔚蓝医药主店凭证）"""
+    api = _get_wemall_master_api(db)
     created, updated, not_found = 0, 0, 0
 
     for product_id in product_ids:

@@ -12,7 +12,7 @@
         text-color="#adb5bd" active-text-color="#ffffff">
         <el-menu-item index="/dashboard"><el-icon><DataLine /></el-icon>总览</el-menu-item>
         <el-menu-item index="/orders"><el-icon><List /></el-icon>订单管理</el-menu-item>
-        <el-menu-item index="/products"><el-icon><Goods /></el-icon>产品库</el-menu-item>
+        <el-menu-item v-if="auth.isAdmin" index="/products"><el-icon><Goods /></el-icon>产品库</el-menu-item>
         <el-menu-item index="/settlements"><el-icon><Money /></el-icon>结算管理</el-menu-item>
         <el-menu-item index="/reports"><el-icon><TrendCharts /></el-icon>统计报表</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/users"><el-icon><User /></el-icon>用户管理</el-menu-item>

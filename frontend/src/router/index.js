@@ -11,7 +11,7 @@ const routes = [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'orders', component: () => import('@/views/Orders.vue') },
-      { path: 'products', component: () => import('@/views/Products.vue') },
+      { path: 'products', component: () => import('@/views/Products.vue'), meta: { adminOnly: true } },
       { path: 'settlements', component: () => import('@/views/Settlements.vue') },
       { path: 'rates', component: () => import('@/views/ExchangeRates.vue') },
       { path: 'reports', component: () => import('@/views/Reports.vue') },
