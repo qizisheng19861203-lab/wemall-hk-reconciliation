@@ -121,14 +121,24 @@ async def sync_products_from_wemall(
 
         for item in products_data:
             goods_id = str(item.get("goodsId"))
-            existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+            sku_code = str(item.get("outerGoodsCode", "") or "").strip()
 
             # 提取价格（取最低售价）
             price_info = item.get("goodsPrice", {})
             retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
 
+            # 优先按产品编码（SKU）查找；找不到再按 wemall_product_id
+            existing = None
+            if sku_code:
+                existing = db.query(Product).filter(Product.sku == sku_code).first()
+            if not existing:
+                existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
             if existing:
                 existing.name = item.get("title", existing.name)
+                existing.wemall_product_id = goods_id  # 顺便更新 wemall_product_id
+                if sku_code:
+                    existing.sku = sku_code
                 existing.image_url = item.get("defaultImageUrl", existing.image_url)
                 if retail_price:
                     existing.retail_price = retail_price
@@ -137,7 +147,7 @@ async def sync_products_from_wemall(
                 product = Product(
                     wemall_product_id=goods_id,
                     name=item.get("title", ""),
-                    sku=item.get("outerGoodsCode", ""),
+                    sku=sku_code,
                     image_url=item.get("defaultImageUrl"),
                     retail_price=retail_price,
                 )
@@ -180,14 +190,24 @@ async def sync_products_by_ids(
                 continue
 
             goods_id = str(item.get("goodsId"))
-            existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+            sku_code = str(item.get("outerGoodsCode", "") or "").strip()
 
             # 提取价格
             price_info = item.get("goodsPrice", {})
             retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
 
+            # 优先按 SKU 查找，再按 wemall_product_id
+            existing = None
+            if sku_code:
+                existing = db.query(Product).filter(Product.sku == sku_code).first()
+            if not existing:
+                existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
             if existing:
                 existing.name = item.get("title", existing.name)
+                existing.wemall_product_id = goods_id
+                if sku_code:
+                    existing.sku = sku_code
                 existing.image_url = item.get("defaultImageUrl", existing.image_url)
                 if retail_price:
                     existing.retail_price = retail_price
@@ -196,7 +216,7 @@ async def sync_products_by_ids(
                 product = Product(
                     wemall_product_id=goods_id,
                     name=item.get("title", ""),
-                    sku=item.get("outerGoodsCode", ""),
+                    sku=sku_code,
                     image_url=item.get("defaultImageUrl"),
                     retail_price=retail_price,
                 )
