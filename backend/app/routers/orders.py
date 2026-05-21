@@ -13,8 +13,16 @@ from app.services.wemall_api import WemallAPI
 router = APIRouter(prefix="/orders", tags=["订单管理"])
 
 
+def _active_store_filter(db: Session):
+    from app.models.wemall_store_config import WemallStoreConfig
+    store = db.query(WemallStoreConfig).filter(WemallStoreConfig.is_active == True).first()
+    if store:
+        return Order.wemall_store_id == store.id
+    return True
+
+
 def _build_query(db: Session, f: OrderFilter):
-    q = db.query(Order).options(joinedload(Order.items))
+    q = db.query(Order).options(joinedload(Order.items)).filter(_active_store_filter(db))
     if f.start_date:
         q = q.filter(Order.order_date >= f.start_date)
     if f.end_date:
@@ -72,7 +80,7 @@ def get_order_stats(
     from app.models.order import OrderItem
     from decimal import Decimal
 
-    q = db.query(Order)
+    q = db.query(Order).filter(_active_store_filter(db))
     if start_date:
         q = q.filter(Order.order_date >= start_date)
     if end_date:

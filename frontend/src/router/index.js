@@ -42,15 +42,12 @@ router.beforeEach((to) => {
 // 这些浮层 teleport 到 <body>，导航离开时若未关闭会残留并拦截所有点击
 router.afterEach(() => {
   nextTick(() => {
-    // 移除孤立的遮罩层
-    document.querySelectorAll('.el-overlay').forEach(el => {
-      // 只移除没有可见内容的遮罩（dialog 关闭动画已结束但未清理）
-      const hasVisibleDialog = el.querySelector('.el-dialog, .el-message-box')
-      if (!hasVisibleDialog) el.remove()
-    })
-    // 移除孤立的下拉浮层
+    // dialog 已改为原地渲染（非 teleport），body 下只会有 ElMessageBox 的残留遮罩
+    // 路由切换时直接全部清除，避免透明遮罩拦截点击
+    document.querySelectorAll('body > .el-overlay').forEach(el => el.remove())
+    // 移除孤立的下拉/日期选择浮层
     document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
-      if (!el.closest('[data-v]') && el.parentNode === document.body) el.remove()
+      if (el.parentNode === document.body) el.remove()
     })
   })
 })

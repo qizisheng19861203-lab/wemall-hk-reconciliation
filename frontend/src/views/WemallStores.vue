@@ -66,7 +66,7 @@
       v-model="formDialog"
       :title="editingId ? '编辑店铺配置' : '新增店铺配置'"
       width="520px"
-      :teleported="false"
+      destroy-on-close
     >
       <el-form :model="form" label-width="110px" :rules="rules" ref="formRef">
         <el-form-item label="店铺名称" prop="name">
@@ -96,7 +96,7 @@
     </el-dialog>
 
     <!-- 测试结果弹窗 -->
-    <el-dialog v-model="testDialog" title="连接测试结果" width="420px" :teleported="false">
+    <el-dialog v-model="testDialog" title="连接测试结果" width="420px" destroy-on-close>
       <div v-if="testResult">
         <el-result
           :icon="testResult.ok ? 'success' : 'error'"

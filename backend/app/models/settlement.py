@@ -26,6 +26,7 @@ class Settlement(Base):
     actual_payment_hkd = Column(Numeric(12, 2), nullable=True, comment="实际支付港币金额")
     status = Column(Enum(SettlementStatus), default=SettlementStatus.pending)
     settled_at = Column(DateTime(timezone=True), nullable=True)
+    wemall_store_id = Column(Integer, nullable=True, comment="来源微盟店铺ID")
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

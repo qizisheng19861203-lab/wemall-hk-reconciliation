@@ -72,7 +72,7 @@
     </el-card>
 
     <!-- 添加/编辑弹窗 -->
-    <el-dialog v-model="formDialog" :title="editingId ? '编辑联系人' : '添加通知联系人'" width="460px" :teleported="false">
+    <el-dialog v-model="formDialog" :title="editingId ? '编辑联系人' : '添加通知联系人'" width="460px" destroy-on-close>
       <el-form :model="form" label-width="100px" style="margin-top:8px">
         <el-form-item label="姓名" required>
           <el-input v-model="form.name" placeholder="如：张总、运营小王" maxlength="50" show-word-limit />

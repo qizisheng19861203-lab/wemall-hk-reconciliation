@@ -31,7 +31,7 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialog" :title="editingId ? '编辑用户' : '新增用户'" width="440px" :teleported="false">
+    <el-dialog v-model="dialog" :title="editingId ? '编辑用户' : '新增用户'" width="440px" destroy-on-close>
       <el-form :model="form" label-width="80px">
         <el-form-item label="用户名" v-if="!editingId" required><el-input v-model="form.username" /></el-form-item>
         <el-form-item label="密码" v-if="!editingId" required><el-input v-model="form.password" type="password" /></el-form-item>

@@ -60,5 +60,6 @@ export const rates = {
 export const reports = {
   dashboard: () => http.get('/reports/dashboard'),
   monthly: (year) => http.get('/reports/monthly', { params: { year } }),
+  monthlyDaily: (year, month) => http.get('/reports/monthly-daily', { params: { year, month } }),
   yearly: () => http.get('/reports/yearly'),
 }

@@ -14,6 +14,7 @@
         >
           <el-button type="success">导入供货价</el-button>
         </el-upload>
+        <el-button type="primary" @click="openAdd" :icon="Plus">新增产品</el-button>
         <el-button type="success" @click="syncRecentProducts" :loading="syncingRecent">同步最近20个产品</el-button>
         <el-button @click="syncProducts" :loading="syncing">同步全部产品</el-button>
       </div>
@@ -64,7 +65,7 @@
       </div><!-- end loading wrapper -->
     </el-card>
 
-    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" :teleported="false">
+    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" destroy-on-close>
       <el-form :model="form" label-width="90px">
         <el-form-item label="产品名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
@@ -88,7 +89,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { products as productsApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -116,6 +117,7 @@ function openAdd() {
   Object.assign(form, { name: '', sku: '', category: '', retail_price: null, supply_price: null, image_url: '', notes: '', is_active: true })
   dialog.value = true
 }
+
 
 function openEdit(row) {
   editingId.value = row.id

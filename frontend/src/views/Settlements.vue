@@ -179,7 +179,7 @@
     </el-card>
 
     <!-- 自定义结算 -->
-    <el-dialog v-model="createDialog" title="自定义结算单" width="500px" :teleported="false">
+    <el-dialog v-model="createDialog" title="自定义结算单" width="500px" destroy-on-close>
       <el-alert type="info" :closable="false" style="margin-bottom:12px">
         选择日期范围，系统会自动计算该周期内的未结算订单并获取今日汇率
       </el-alert>
@@ -199,7 +199,7 @@
     </el-dialog>
 
     <!-- 确认收款 -->
-    <el-dialog v-model="confirmDialog" title="确认收款" width="420px" :teleported="false">
+    <el-dialog v-model="confirmDialog" title="确认收款" width="420px" destroy-on-close>
       <el-form :model="confirmForm" label-width="110px">
         <el-form-item label="应付金额(HKD)">
           <strong style="font-size:18px">HK${{ confirmingSettlement?.payment_amount_hkd }}</strong>

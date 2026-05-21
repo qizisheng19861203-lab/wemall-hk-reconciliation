@@ -22,6 +22,12 @@ router = APIRouter(prefix="/settlements", tags=["结算管理"])
 rates_router = APIRouter(prefix="/exchange-rates", tags=["汇率管理"])
 
 
+def _active_store_id(db: Session) -> Optional[int]:
+    from app.models.wemall_store_config import WemallStoreConfig
+    store = db.query(WemallStoreConfig).filter(WemallStoreConfig.is_active == True).first()
+    return store.id if store else None
+
+
 def _make_invoice_number():
     now = datetime.now()
     suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
@@ -36,7 +42,10 @@ def list_settlements(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
+    sid = _active_store_id(db)
     q = db.query(Settlement)
+    if sid is not None:
+        q = q.filter(Settlement.wemall_store_id == sid)
     if status:
         q = q.filter(Settlement.status == status)
     settlements = q.order_by(Settlement.created_at.desc()).offset(skip).limit(limit).all()
@@ -85,6 +94,7 @@ def create_settlement(
         hkd_rate=payload.hkd_rate,
         payment_amount_hkd=payment_hkd,
         notes=payload.notes,
+        wemall_store_id=_active_store_id(db),
     )
     db.add(settlement)
     db.flush()

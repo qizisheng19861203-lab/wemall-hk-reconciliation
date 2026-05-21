@@ -28,6 +28,19 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE notification_contacts MODIFY COLUMN phone VARCHAR(20) NULL"))
         except Exception:
             pass
+        # 给 orders 表加来源店铺字段
+        try:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN wemall_store_id INT NULL COMMENT '来源微盟店铺ID'"))
+        except Exception:
+            pass  # column already exists
+        # 给 settlements 表加来源店铺字段
+        try:
+            conn.execute(text("ALTER TABLE settlements ADD COLUMN wemall_store_id INT NULL COMMENT '来源微盟店铺ID'"))
+        except Exception:
+            pass  # column already exists
+        conn.commit()
+        # 旧结算单全部标记为店铺 1（我的店铺主店）
+        conn.execute(text("UPDATE settlements SET wemall_store_id = 1 WHERE wemall_store_id IS NULL"))
         conn.commit()
 
     # Seed default Wemall store config from .env (only if table is empty)

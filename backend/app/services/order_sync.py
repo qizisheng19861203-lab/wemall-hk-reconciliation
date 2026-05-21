@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from app.models.order import Order, OrderItem, ShippingStatus
 from app.models.product import Product
+from app.models.wemall_store_config import WemallStoreConfig
 from app.services.wemall_api import WemallAPI
 import json
 
@@ -17,6 +18,10 @@ async def sync_orders(
         start_date = datetime.now() - timedelta(days=7)
     if not end_date:
         end_date = datetime.now()
+
+    # 获取当前激活店铺 ID，用于标记订单来源
+    active_store = db.query(WemallStoreConfig).filter(WemallStoreConfig.is_active == True).first()
+    active_store_id = active_store.id if active_store else None
 
     api = WemallAPI()
     created, updated, skipped = 0, 0, 0
@@ -91,6 +96,7 @@ async def sync_orders(
                     buyer_phone=buyer_info.get("phone", ""),
                     shipping_address="",
                     shipping_status=shipping_status,
+                    wemall_store_id=active_store_id,
                     raw_data=json.dumps(order_data, ensure_ascii=False),
                 )
                 db.add(order)
