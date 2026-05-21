@@ -15,6 +15,7 @@
         <el-menu-item index="/reports"><el-icon><TrendCharts /></el-icon>统计报表</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/users"><el-icon><User /></el-icon>用户管理</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/notification-contacts"><el-icon><Bell /></el-icon>通知号码</el-menu-item>
+        <el-menu-item v-if="auth.isAdmin" index="/wemall-stores"><el-icon><Shop /></el-icon>微盟店铺</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -104,6 +105,7 @@ const titleMap = {
   '/reports': '统计报表',
   '/users': '用户管理',
   '/notification-contacts': '通知号码管理',
+  '/wemall-stores': '微盟店铺配置',
 }
 const pageTitle = computed(() => titleMap[route.path] || '微盟香港对账')
 const roleLabel = computed(() => ({ admin: '管理员', operator: '运营', distributor: '分销商' })[auth.user?.role] || '')

@@ -17,6 +17,7 @@ const routes = [
       { path: 'reports', component: () => import('@/views/Reports.vue') },
       { path: 'users', component: () => import('@/views/Users.vue'), meta: { adminOnly: true } },
       { path: 'notification-contacts', component: () => import('@/views/NotificationContacts.vue'), meta: { adminOnly: true } },
+      { path: 'wemall-stores', component: () => import('@/views/WemallStores.vue'), meta: { adminOnly: true } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

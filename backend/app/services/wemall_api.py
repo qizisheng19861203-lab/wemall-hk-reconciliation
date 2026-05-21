@@ -4,16 +4,60 @@ from typing import Optional
 from app.config import settings
 
 
+def get_active_wemall_credentials() -> dict:
+    """
+    从数据库获取当前激活的微盟店铺配置。
+    若 DB 中无激活配置则回落到 .env 中的默认值。
+    返回 {"client_id": ..., "client_secret": ..., "shop_id": ...}
+    """
+    try:
+        from app.database import SessionLocal
+        from app.models.wemall_store_config import WemallStoreConfig
+        db = SessionLocal()
+        try:
+            active = db.query(WemallStoreConfig).filter(WemallStoreConfig.is_active == True).first()
+            if active:
+                return {
+                    "client_id": active.client_id,
+                    "client_secret": active.client_secret,
+                    "shop_id": active.shop_id or "",
+                    "store_name": active.name,
+                }
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[WemallAPI] get_active_wemall_credentials fallback to .env: {e}")
+
+    # Fallback to .env
+    return {
+        "client_id": settings.WEMALL_APP_KEY,
+        "client_secret": settings.WEMALL_APP_SECRET,
+        "shop_id": settings.WEMALL_SHOP_ID,
+        "store_name": "默认店铺",
+    }
+
+
 class WemallAPI:
     """微盟云开放平台 API v2.0 封装"""
 
-    def __init__(self):
-        self.client_id = settings.WEMALL_APP_KEY
-        self.client_secret = settings.WEMALL_APP_SECRET
-        self.shop_id = settings.WEMALL_SHOP_ID
+    def __init__(self, client_id: str = None, client_secret: str = None, shop_id: str = None):
+        """
+        优先使用传入的凭证；若不传则从 DB 激活配置读取，再回落 .env。
+        """
+        if client_id and client_secret:
+            self.client_id = client_id
+            self.client_secret = client_secret
+            self.shop_id = shop_id or ""
+        else:
+            creds = get_active_wemall_credentials()
+            self.client_id = creds["client_id"]
+            self.client_secret = creds["client_secret"]
+            self.shop_id = creds["shop_id"]
+
         self.base_url = "https://dopen.weimob.com/apigw/weimob_shop/v2.0"
         self._access_token: Optional[str] = None
         self._business_id: Optional[str] = None
+        self._org_vid: Optional[int] = None
 
     async def _get_access_token(self) -> str:
         """获取 access_token（使用 client_credentials 授权）"""
@@ -41,7 +85,7 @@ class WemallAPI:
 
     async def _get_organization_vid(self) -> int:
         """获取组织 vid（通过 bos/organization/getList 接口）"""
-        if hasattr(self, "_org_vid") and self._org_vid:
+        if self._org_vid:
             return self._org_vid
 
         token = await self._get_access_token()
@@ -117,7 +161,7 @@ class WemallAPI:
                 "queryTime": {
                     "startTime": start_time,
                     "endTime": end_time,
-                    "type": 0,
+                    "type": 1,  # 1=按创建时间查询（0会被API误识别为null）
                 },
                 "orderDomains": [1, 2, 3],
             },

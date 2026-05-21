@@ -4,6 +4,7 @@ from app.models.order import Order, OrderItem, ShippingStatus
 from app.models.settlement import Settlement, SettlementNotification, SettlementStatus
 from app.models.exchange_rate import ExchangeRate
 from app.models.notification_contact import NotificationContact
+from app.models.wemall_store_config import WemallStoreConfig
 
 __all__ = [
     "User", "UserRole",
@@ -12,4 +13,5 @@ __all__ = [
     "Settlement", "SettlementNotification", "SettlementStatus",
     "ExchangeRate",
     "NotificationContact",
+    "WemallStoreConfig",
 ]

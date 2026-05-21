@@ -9,6 +9,7 @@ from app.routers.orders import router as orders_router
 from app.routers.settlements import router as settlements_router, rates_router
 from app.routers.reports import router as reports_router
 from app.routers.notification_contacts import router as contacts_router
+from app.routers.wemall_stores import router as wemall_stores_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 from sqlalchemy import text
 import app.models  # ensure all models are imported for table creation
@@ -28,6 +29,30 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
         conn.commit()
+
+    # Seed default Wemall store config from .env (only if table is empty)
+    if settings.WEMALL_APP_KEY:
+        from app.database import SessionLocal
+        from app.models.wemall_store_config import WemallStoreConfig
+        db = SessionLocal()
+        try:
+            count = db.query(WemallStoreConfig).count()
+            if count == 0:
+                default_store = WemallStoreConfig(
+                    name="我的店铺（主店）",
+                    client_id=settings.WEMALL_APP_KEY,
+                    client_secret=settings.WEMALL_APP_SECRET,
+                    shop_id=settings.WEMALL_SHOP_ID,
+                    notes="从 .env 自动导入的默认配置",
+                    is_active=True,
+                )
+                db.add(default_store)
+                db.commit()
+        except Exception as e:
+            print(f"Seed wemall_store_configs failed: {e}")
+        finally:
+            db.close()
+
     start_scheduler()
     yield
     stop_scheduler()
@@ -55,6 +80,7 @@ app.include_router(settlements_router, prefix="/api")
 app.include_router(rates_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(contacts_router, prefix="/api")
+app.include_router(wemall_stores_router, prefix="/api")
 
 
 @app.get("/health")
