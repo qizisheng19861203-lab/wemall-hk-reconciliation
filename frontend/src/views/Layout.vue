@@ -44,7 +44,7 @@
           </el-dropdown>
 
           <!-- 修改密码弹窗 -->
-          <el-dialog v-model="pwdDialog" title="修改密码" width="400px" destroy-on-close>
+          <el-dialog v-model="pwdDialog" title="修改密码" width="400px" destroy-on-close :teleported="false">
             <el-form :model="pwdForm" label-width="90px">
               <el-form-item label="原密码">
                 <el-input v-model="pwdForm.old_password" type="password" show-password />
@@ -71,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive, onMounted, defineAsyncComponent } from 'vue'
+import { computed, ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { Bell } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -109,6 +109,8 @@ const titleMap = {
 const pageTitle = computed(() => titleMap[route.path] || '微盟香港对账')
 const roleLabel = computed(() => ({ admin: '管理员', operator: '运营', distributor: '分销商' })[auth.user?.role] || '')
 const roleTag = computed(() => ({ admin: '', operator: 'success', distributor: 'info' })[auth.user?.role] || 'info')
+
+onBeforeUnmount(() => { pwdDialog.value = false; pwdLoading.value = false })
 
 const pwdDialog = ref(false)
 const pwdLoading = ref(false)

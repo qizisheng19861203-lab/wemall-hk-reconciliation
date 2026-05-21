@@ -36,20 +36,23 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !isLoggedIn) return '/login'
   if (to.meta.adminOnly && !isAdmin) return '/dashboard'
   if (to.path === '/login' && isLoggedIn) return '/dashboard'
+
+  // 导航前立即清理 body 上的残留遮罩，防止切换时遮罩仍在拦截点击
+  cleanupOverlays()
 })
 
-// 每次路由切换后，清理 Element Plus 遗留的浮层（dialog/select/datepicker overlay）
-// 这些浮层 teleport 到 <body>，导航离开时若未关闭会残留并拦截所有点击
-router.afterEach(() => {
-  nextTick(() => {
-    // dialog 已改为原地渲染（非 teleport），body 下只会有 ElMessageBox 的残留遮罩
-    // 路由切换时直接全部清除，避免透明遮罩拦截点击
-    document.querySelectorAll('body > .el-overlay').forEach(el => el.remove())
-    // 移除孤立的下拉/日期选择浮层
-    document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
-      if (el.parentNode === document.body) el.remove()
-    })
+// 清理 El Plus 遗留的浮层（teleport 到 body 的 overlay/popper）
+// dialog 已改为 teleported=false，body 下只剩 ElMessageBox 及偶发残影
+function cleanupOverlays() {
+  document.querySelectorAll('body > .el-overlay').forEach(el => el.remove())
+  document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
+    if (el.parentNode === document.body) el.remove()
   })
+}
+
+router.afterEach(() => {
+  // afterEach 再清理一次（nextTick 等 Vue 完成 DOM 更新后）
+  nextTick(cleanupOverlays)
 })
 
 export default router

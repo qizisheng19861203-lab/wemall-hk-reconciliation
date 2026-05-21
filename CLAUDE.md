@@ -17,6 +17,20 @@
 - 部署：Docker Compose + Nginx + Let's Encrypt
 - 自动部署：GitHub Actions（push 到 main 自动触发）
 
+## 服务器端口/代理架构（2026-05 更新）
+
+```
+宿主机 nginx（新安装，统一管 SSL）
+├── :80  → 全部 redirect 到 https
+├── :443 weimob.blue-medicine.com → 127.0.0.1:18080（wemall 内部 HTTP）
+└── :443 api.blue-medicine.com   → 127.0.0.1:8001（客服系统 weiland-app）
+
+wemall-hk-nginx-1：只监听 127.0.0.1:18080（不再占用 443）
+weiland-app：       继续 8001（不变）
+```
+
+**关键变化**：wemall 内部 nginx 不再直接暴露 443，SSL 由宿主机 nginx 统一终结，内部走 HTTP。
+
 ## 核心业务逻辑
 
 ### 订单管理页面（Orders.vue）
