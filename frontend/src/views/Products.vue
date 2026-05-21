@@ -25,7 +25,12 @@
         <el-button @click="load">搜索</el-button>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
       </div>
-      <el-table :data="products" v-loading="loading" stripe>
+      <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
+      <div style="position:relative;">
+      <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
+        <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
+      </div>
+      <el-table :data="products" stripe>
         <el-table-column label="图片" width="70">
           <template #default="{ row }">
             <el-image :src="row.image_url" style="width:44px;height:44px;border-radius:4px" fit="cover">
@@ -50,12 +55,13 @@
             <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80" fixed="right" v-if="auth.isAdmin">
+        <el-table-column label="操作" width="80" v-if="auth.isAdmin">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
+      </div><!-- end loading wrapper -->
     </el-card>
 
     <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" :teleported="false">
@@ -82,6 +88,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { products as productsApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -143,7 +150,7 @@ async function syncProducts() {
   try {
     const res = await productsApi.syncWemall()
     ElMessage.success(`同步完成：新增${res.created}，更新${res.updated}`)
-    load()
+    await load()
   } catch (e) { ElMessage.error(e.message) }
   finally { syncing.value = false }
 }
@@ -153,7 +160,7 @@ async function syncRecentProducts() {
   try {
     const res = await productsApi.syncWemall()
     ElMessage.success(`同步最近20个产品完成：新增${res.created}，更新${res.updated}`)
-    load()
+    await load()
   } catch (e) { ElMessage.error(e.message) }
   finally { syncingRecent.value = false }
 }

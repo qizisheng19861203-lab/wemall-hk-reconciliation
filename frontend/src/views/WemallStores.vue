@@ -20,7 +20,7 @@
     </el-alert>
 
     <!-- 店铺列表 -->
-    <el-table :data="stores" border stripe v-loading="loading">
+    <el-table :data="stores" border stripe>
       <el-table-column label="店铺名称" prop="name" min-width="160">
         <template #default="{ row }">
           <div style="display:flex; align-items:center; gap:8px;">
@@ -43,7 +43,7 @@
       </el-table-column>
       <el-table-column label="Shop ID" prop="shop_id" width="140" />
       <el-table-column label="备注" prop="notes" min-width="140" show-overflow-tooltip />
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="操作" width="260">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
           <el-button size="small" type="info" @click="testStore(row)" :loading="testingId === row.id">测试</el-button>
