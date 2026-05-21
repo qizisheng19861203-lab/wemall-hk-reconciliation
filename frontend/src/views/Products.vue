@@ -21,11 +21,11 @@
     </div>
 
     <el-card shadow="never">
-      <div style="margin-bottom:12px;display:flex;gap:8px">
-        <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px" @clear="load" @keyup.enter="load" />
-        <el-button @click="load">搜索</el-button>
+      <form @submit.prevent="load" style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+        <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px" @clear="load" />
+        <el-button native-type="submit">搜索</el-button>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
-      </div>
+      </form>
       <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
       <div style="position:relative;">
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
@@ -80,8 +80,14 @@
         <el-form-item label="启用"><el-switch v-model="form.is_active" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialog = false">取消</el-button>
-        <el-button type="primary" @click="save" :loading="saving">保存</el-button>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <el-button v-if="editingId" type="danger" plain @click="deleteProduct" :loading="deleting">删除产品</el-button>
+          <div v-else />
+          <div>
+            <el-button @click="dialog = false">取消</el-button>
+            <el-button type="primary" @click="save" :loading="saving">保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -100,6 +106,7 @@ const loading = ref(false)
 const syncing = ref(false)
 const syncingRecent = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
 const dialog = ref(false)
 const editingId = ref(null)
 const keyword = ref('')
@@ -145,6 +152,24 @@ async function save() {
     load()
   } catch (e) { ElMessage.error(e.message) }
   finally { saving.value = false }
+}
+
+async function deleteProduct() {
+  try {
+    await ElMessageBox.confirm('确定要删除这个产品吗？此操作不可撤销。', '删除确认', {
+      confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    })
+  } catch { return }
+  deleting.value = true
+  try {
+    await productsApi.remove(editingId.value)
+    ElMessage.success('删除成功')
+    dialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message || '删除失败')
+  } finally { deleting.value = false }
 }
 
 async function syncProducts() {
@@ -201,6 +226,6 @@ function handleImportError(error) {
   ElMessage.error(msg)
 }
 
-onBeforeUnmount(() => { loading.value = false; dialog.value = false })
+onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false })
 onMounted(load)
 </script>

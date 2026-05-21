@@ -96,6 +96,27 @@ def update_product(
     return result
 
 
+@router.delete("/{product_id}")
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="产品不存在")
+    # 检查是否有关联的订单条目
+    linked_count = db.query(OrderItem).filter(OrderItem.product_id == product_id).count()
+    if linked_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"该产品有 {linked_count} 条订单记录，不能删除。可以将其设为"停用"代替。"
+        )
+    db.delete(product)
+    db.commit()
+    return {"message": "删除成功"}
+
+
 @router.post("/sync-wemall")
 async def sync_products_from_wemall(
     page_limit: int = None,

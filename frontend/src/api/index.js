@@ -16,6 +16,7 @@ export const products = {
   list: (params) => http.get('/products', { params }),
   create: (data) => http.post('/products', data),
   update: (id, data) => http.put(`/products/${id}`, data),
+  remove: (id) => http.delete(`/products/${id}`),
   syncWemall: () => http.post('/products/sync-wemall'),
 }
 
