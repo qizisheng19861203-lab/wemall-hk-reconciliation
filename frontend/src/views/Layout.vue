@@ -2,8 +2,11 @@
   <el-container class="layout">
     <el-aside width="220px" class="sidebar">
       <div class="sidebar-logo">
-        <el-icon size="22" color="#fff"><Shop /></el-icon>
-        <span>HK对账</span>
+        <img src="/logo.png" style="height:38px;object-fit:contain;filter:brightness(0) invert(1)" alt="蔚蓝医药">
+        <div style="line-height:1.2">
+          <div style="font-size:13px;font-weight:700;letter-spacing:0.5px">蔚蓝医药</div>
+          <div style="font-size:10px;opacity:0.6;font-weight:400">对账系统</div>
+        </div>
       </div>
       <el-menu router :default-active="$route.path" background-color="#1a2035"
         text-color="#adb5bd" active-text-color="#ffffff">
