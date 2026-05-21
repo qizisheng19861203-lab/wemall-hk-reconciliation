@@ -96,6 +96,11 @@
             <el-checkbox v-model="filter.unsettled_only">仅未结算</el-checkbox>
           </el-form-item>
           <el-form-item style="margin-bottom:0">
+            <el-tooltip content="隐藏所有订单条目都是「非供货」的订单（分销商独有商品，不在我们供货范围内）" placement="top">
+              <el-checkbox v-model="filter.supply_only">只看我方供货</el-checkbox>
+            </el-tooltip>
+          </el-form-item>
+          <el-form-item style="margin-bottom:0">
             <el-input v-model="filter.keyword" placeholder="订单号/买家" clearable style="width:160px" />
           </el-form-item>
           <el-form-item style="margin-bottom:0">
@@ -117,7 +122,12 @@
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="flatRows" v-loading="loading" stripe :span-method="spanMethod" border style="font-size:14px">
+      <!-- 手动 loading 层：v-if 确保加载完成后立刻从 DOM 消失，不留透明遮罩残留 -->
+      <div style="position:relative; min-height:80px;">
+      <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
+        <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
+      </div>
+      <el-table :data="flatRows" stripe :span-method="spanMethod" border style="font-size:14px">
         <el-table-column prop="wemall_order_id" label="订单号" width="165" />
         <el-table-column label="下单日期" width="100">
           <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
@@ -133,6 +143,9 @@
         <el-table-column label="供货单价(RMB)" width="130" align="right">
           <template #default="{ row }">
             <span v-if="row._item.supply_price" style="color:#409EFF">¥{{ Number(row._item.supply_price).toFixed(2) }}</span>
+            <!-- product_id=null → 产品不在我们供货目录 → 非供货（灰色）-->
+            <!-- product_id≠null 但无supply_price → 我们的产品，缺供货价 → 待录价（红色）-->
+            <el-tag v-else-if="row._item.product_id == null" type="info" size="small">非供货</el-tag>
             <el-tag v-else type="danger" size="small">待录价</el-tag>
           </template>
         </el-table-column>
@@ -164,12 +177,13 @@
             <el-tag v-else type="info" size="small">未结算</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" fixed="right" v-if="auth.isAdminOrOperator">
+        <el-table-column label="操作" width="70" v-if="auth.isAdminOrOperator">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
+      </div><!-- end loading wrapper -->
       <div style="margin-top:16px;text-align:right">
         <el-pagination v-model:current-page="page" :page-size="pageSize"
           :total="total" layout="total, prev, pager, next" @current-change="loadOrders" />
@@ -210,6 +224,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { orders as ordersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -247,6 +262,7 @@ const filter = reactive({
   shipping_status: null,
   is_refunded: null,
   unsettled_only: false,
+  supply_only: false,   // 只看有我方供货商品的订单
   keyword: '',
 })
 
@@ -338,7 +354,14 @@ function onDateRangeChange() {
 const flatRows = computed(() => {
   const rows = []
   for (const order of orders.value) {
-    const items = order.items?.length ? order.items : [{ product_name: '(无商品)', quantity: 0, supply_price: null, supply_subtotal: null, id: 0 }]
+    const items = order.items?.length ? order.items : [{ product_name: '(无商品)', quantity: 0, supply_price: null, supply_subtotal: null, product_id: null, id: 0 }]
+
+    // 「只看我方供货」过滤：跳过所有条目都是非供货（product_id=null 且无 supply_price）的订单
+    if (filter.supply_only) {
+      const hasSupplyItem = items.some(it => it.supply_price != null || it.product_id != null)
+      if (!hasSupplyItem) continue
+    }
+
     items.forEach((item, idx) => {
       rows.push({ ...order, _item: item, _itemIndex: idx, _itemCount: items.length })
     })
@@ -428,6 +451,7 @@ function resetFilter() {
     shipping_status: null,
     is_refunded: null,
     unsettled_only: false,
+    supply_only: false,
     keyword: '',
   })
   quickMode.value = 'month'
