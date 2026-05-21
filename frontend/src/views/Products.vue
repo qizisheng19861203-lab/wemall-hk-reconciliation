@@ -21,11 +21,12 @@
     </div>
 
     <el-card shadow="never">
-      <form @submit.prevent="load" style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
-        <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px" @clear="load" />
-        <el-button native-type="submit">搜索</el-button>
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+        <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px"
+          @clear="load" @keydown.enter.prevent="load" />
+        <el-button @click="load">搜索</el-button>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
-      </form>
+      </div>
       <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
       <div style="position:relative;">
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
@@ -65,7 +66,7 @@
       </div><!-- end loading wrapper -->
     </el-card>
 
-    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" destroy-on-close>
+    <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" destroy-on-close :teleported="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="产品名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="SKU"><el-input v-model="form.sku" /></el-form-item>
