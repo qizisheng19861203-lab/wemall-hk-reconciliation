@@ -18,6 +18,8 @@ export const products = {
   update: (id, data) => http.put(`/products/${id}`, data),
   remove: (id) => http.delete(`/products/${id}`),
   syncWemall: () => http.post('/products/sync-wemall'),
+  getTargetStoreConfig: () => http.get('/products/target-store-config'),
+  pushToStore: (data) => http.post('/products/push-to-store', data),
 }
 
 export const orders = {

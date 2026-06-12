@@ -17,6 +17,9 @@
         <el-button type="primary" @click="openAdd" :icon="Plus">新增产品</el-button>
         <el-button type="success" @click="syncRecentProducts" :loading="syncingRecent">同步最近20个产品</el-button>
         <el-button @click="syncProducts" :loading="syncing">同步全部产品</el-button>
+        <el-button type="warning" @click="pushToStore" :disabled="!selectedProducts.length" :loading="pushing">
+          同步到倍赛思甄选 ({{ selectedProducts.length }})
+        </el-button>
       </div>
     </div>
 
@@ -32,7 +35,8 @@
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
-      <el-table :data="products" stripe>
+      <el-table :data="products" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" v-if="auth.isAdmin" />
         <el-table-column label="图片" width="70">
           <template #default="{ row }">
             <el-image :src="row.image_url" style="width:44px;height:44px;border-radius:4px" fit="cover">
@@ -108,10 +112,45 @@ const syncing = ref(false)
 const syncingRecent = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const pushing = ref(false)
 const dialog = ref(false)
 const editingId = ref(null)
 const keyword = ref('')
 const form = reactive({ name: '', sku: '', category: '', retail_price: null, supply_price: null, image_url: '', notes: '', is_active: true })
+const selectedProducts = ref([])
+
+function handleSelectionChange(val) {
+  selectedProducts.value = val
+}
+
+async function pushToStore() {
+  if (!selectedProducts.value.length) return ElMessage.warning('请先勾选要同步的产品')
+  const names = selectedProducts.value.map(p => p.name).join('、')
+  try {
+    await ElMessageBox.confirm(
+      `确定将以下 ${selectedProducts.value.length} 个产品同步到倍赛思甄选？\n\n${names}\n\n将以零售价创建商品，图片和详情会自动同步。`,
+      '同步确认',
+      { confirmButtonText: '同步', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+
+  pushing.value = true
+  try {
+    const res = await productsApi.pushToStore({
+      product_ids: selectedProducts.value.map(p => p.id),
+    })
+    const s = res.success?.length || 0
+    const f = res.failed?.length || 0
+    if (f > 0) {
+      const errList = res.failed.map(x => `${x.name}: ${x.error}`).join('\n')
+      ElMessageBox.alert(errList, `成功${s}个，失败${f}个`, { confirmButtonText: '知道了' })
+    } else {
+      ElMessage.success(`成功同步 ${s} 个产品到倍赛思甄选`)
+    }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message)
+  } finally { pushing.value = false }
+}
 
 async function load() {
   loading.value = true
@@ -227,6 +266,6 @@ function handleImportError(error) {
   ElMessage.error(msg)
 }
 
-onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false })
+onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false; pushing.value = false })
 onMounted(load)
 </script>

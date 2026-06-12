@@ -36,10 +36,17 @@ weiland-app：       继续 8001（不变）
 ## 多店铺架构（2026-05 新增）
 
 ### 微盟店铺配置（wemall_store_configs 表）
-| id | name | 用途 |
-|----|------|------|
-| 1 | 蔚蓝医药（主店） | 产品母体，所有产品来源 |
-| 2 | 倍赛思甄选（分销商） | 实际下单店铺，订单/结算来源 |
+| id | name | client_id | shop_id | 用途 |
+|----|------|-----------|---------|------|
+| 1 | 蔚蓝医药（主店） | 0C07E7...525775 | 4022033217721 | 产品母体，所有产品来源 |
+| 2 | 倍赛思甄选（分销商） | F6AA17...C9EE61 | 4022606276679 | 实际下单店铺，订单/结算来源 |
+
+### 与快递云打印联动（2026-06 已接通）
+- 快递云打印项目（kuaidi-print-service）已接入倍赛思甄选
+- 凭证同步：倍赛思甄选的 APP_KEY/SECRET 已配置到快递云打印 `.env`
+- 倍赛思甄选 VID = 6017507541679（动态获取）
+- 所有核心接口已验证通过：订单拉取、发货回填、订单标旗、商品列表、库存更新
+- 订单以 `shop_label="微盟·倍赛思甄选"` 入库快递云打印系统
 
 ### 多店铺隔离规则
 - **orders** 和 **settlements** 表均有 `wemall_store_id` 字段
@@ -107,6 +114,15 @@ DELETE FROM settlements WHERE wemall_store_id = 1;
 - 供货价为空时显示"待录价"警告
 - 产品去重逻辑：以 SKU（outerGoodsCode）为唯一标识，同步时先按 SKU 查找，找不到再按 wemall_product_id，都找不到才新增
 - 编辑弹窗内有「删除产品」按钮（有订单记录则拒绝，提示改停用）
+
+### 产品推送到倍赛思甄选（Products.vue）
+- **仅管理员可操作**，在产品库页面勾选产品后点击「同步到倍赛思甄选」按钮
+- 一键同步，无需手动配置——后端自动获取目标店铺的类目、模板、配送方式、管理员 wid
+- 从蔚蓝医药（id=1）拉取完整商品详情（图片、描述、副标题等微盟内部 URL）
+- 以产品库的零售价（retail_price）作为倍赛思甄选的销售价
+- 调用微盟 `weimob_shop/goods/create` 接口创建商品
+- 配送方式等细节可事后在倍赛思甄选微盟后台调整
+- 实现文件：`wemall_api.py`（create_goods/get_goods_categories/get_goods_templates/get_fulfill_types/get_employee_wid/get_freight_templates）、`products.py`（push-to-store 端点）
 
 ### 自动任务（scheduler.py）
 - **订单同步**：每 10 分钟从微盟同步一次订单（使用激活店铺凭证）
@@ -192,6 +208,8 @@ git add . && git commit -m "描述" && git push
 - `GET  /api/products` 产品列表（仅 admin）
 - `POST /api/products/sync-wemall` 同步产品（固定蔚蓝医药 id=1）
 - `DELETE /api/products/{id}` 删除产品（有订单记录时拒绝）
+- `GET  /api/products/target-store-config` 查询倍赛思甄选店铺配置（类目/模板/配送/wid）
+- `POST /api/products/push-to-store` 推送产品到倍赛思甄选（全自动）
 - `GET  /api/settlements` 结算列表（按激活店铺过滤）
 - `POST /api/settlements` 创建结算单（自动打激活店铺ID）
 - `POST /api/settlements/{id}/confirm` 确认收款结清
@@ -320,6 +338,7 @@ RUN printf 'Types: deb\nURIs: http://mirrors.tencent.com/debian\nSuites: trixie 
 - [x] 产品库仅管理员可见
 - [x] 产品同步固定用蔚蓝医药（id=1）凭证
 - [x] 产品去重（以 SKU 为唯一标识）
+- [x] 产品推送到倍赛思甄选（勾选产品一键同步，自动获取配置）
 - [ ] 上传公章图片到 `static/seal.png`（发票PDF会显示）
 - [ ] 正式切换到倍赛思甄选时：清空蔚蓝医药历史订单和结算（见上方 SQL）
 - [ ] 申请腾讯云短信模板（结算通知用，当前已改用免费邮件）

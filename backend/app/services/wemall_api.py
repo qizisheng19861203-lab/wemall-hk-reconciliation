@@ -183,6 +183,62 @@ class WemallAPI:
         }
         return await self._request("order/detail/get", payload)
 
+    async def get_goods_categories(self) -> list:
+        """获取商品类目列表"""
+        vid = await self._get_organization_vid()
+        result = await self._request("goods/category/getList", {
+            "basicInfo": {"vid": vid},
+        })
+        return result.get("goodsCategoryInfoList", [])
+
+    async def get_goods_templates(self) -> list:
+        """获取商详模板列表"""
+        vid = await self._get_organization_vid()
+        result = await self._request("goods/goodtemplate/getList", {
+            "pageNum": 1,
+            "pageSize": 50,
+            "basicInfo": {"vid": vid},
+        })
+        return result.get("pageList", [])
+
+    async def get_fulfill_types(self) -> list:
+        """获取配送方式列表"""
+        vid = await self._get_organization_vid()
+        result = await self._request("fulfill/goods/fulfilltype/getList", {
+            "basicInfo": {"vid": vid},
+        })
+        return result.get("nodeDeliveryDtoList", [])
+
+    async def create_goods(self, payload: dict) -> dict:
+        """创建商品（添加在售商品）"""
+        return await self._request("goods/create", payload)
+
+    async def get_employee_wid(self) -> int:
+        """获取管理员 wid"""
+        token = await self._get_access_token()
+        url = f"https://dopen.weimob.com/apigw/bos/v2.0/employee/get?accesstoken={token}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json={})
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("code", {}).get("errcode") != "0":
+                raise Exception(f"获取员工信息失败: {data.get('code', {}).get('errmsg')}")
+            return data.get("data", {}).get("wid")
+
+    async def get_freight_templates(self) -> list:
+        """获取商家配送运费模板列表"""
+        vid = await self._get_organization_vid()
+        result = await self._request("fulfill/freight/merchant/template/getList", {
+            "basicInfo": {"vid": vid},
+        })
+        default_tpl = result.get("defaultFreightTemplate")
+        custom_list = result.get("freightTemplateList", [])
+        all_templates = []
+        if default_tpl:
+            all_templates.append(default_tpl)
+        all_templates.extend(custom_list)
+        return all_templates
+
     async def get_product_detail(self, goods_id: str) -> dict:
         """获取商品详情"""
         vid = await self._get_organization_vid()

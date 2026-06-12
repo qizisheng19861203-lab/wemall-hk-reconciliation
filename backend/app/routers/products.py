@@ -267,6 +267,180 @@ async def sync_products_by_ids(
     return {"created": created, "updated": updated, "not_found": not_found}
 
 
+def _get_wemall_target_api(db: Session) -> WemallAPI:
+    """使用倍赛思甄选（id=2）的凭证"""
+    from app.models.wemall_store_config import WemallStoreConfig
+    target = db.query(WemallStoreConfig).filter(WemallStoreConfig.id == 2).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="倍赛思甄选店铺配置不存在（id=2）")
+    return WemallAPI(
+        client_id=target.client_id,
+        client_secret=target.client_secret,
+        shop_id=target.shop_id,
+    )
+
+
+@router.get("/target-store-config")
+async def get_target_store_config(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """获取目标店铺（倍赛思甄选）的类目、模板、配送方式等配置"""
+    api = _get_wemall_target_api(db)
+    try:
+        categories = await api.get_goods_categories()
+        templates = await api.get_goods_templates()
+        fulfill_types = await api.get_fulfill_types()
+        wid = await api.get_employee_wid()
+        freight_templates = await api.get_freight_templates()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"查询目标店铺配置失败: {str(e)}")
+
+    return {
+        "categories": categories,
+        "templates": templates,
+        "fulfillTypes": fulfill_types,
+        "freightTemplates": freight_templates,
+        "wid": wid,
+    }
+
+
+@router.post("/push-to-store")
+async def push_products_to_store(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """将选中的产品推送到倍赛思甄选店铺（全自动，后端自动获取配置）"""
+    product_ids = payload.get("product_ids", [])
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="请选择要同步的产品")
+
+    source_api = _get_wemall_master_api(db)
+    target_api = _get_wemall_target_api(db)
+
+    target_vid = await target_api._get_organization_vid()
+
+    # 自动获取目标店铺配置
+    try:
+        categories = await target_api.get_goods_categories()
+        templates = await target_api.get_goods_templates()
+        fulfill_types = await target_api.get_fulfill_types()
+        wid = await target_api.get_employee_wid()
+        freight_templates = await target_api.get_freight_templates()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取目标店铺配置失败: {str(e)}")
+
+    # 取第一个可用值
+    if not categories:
+        raise HTTPException(status_code=502, detail="目标店铺没有可用的商品类目")
+    if not templates:
+        raise HTTPException(status_code=502, detail="目标店铺没有可用的商详模板")
+    if not wid:
+        raise HTTPException(status_code=502, detail="无法获取目标店铺管理员 wid")
+
+    # 找二级类目（优先取第一个有 children 的）
+    category_id = None
+    for cat in categories:
+        children = cat.get("children", [])
+        if children:
+            category_id = children[0].get("categoryId")
+            break
+    if not category_id:
+        category_id = categories[0].get("categoryId")
+
+    template_id = templates[0].get("id")
+
+    # 配送方式：取第一个配送方式
+    delivery_config = {}
+    if fulfill_types:
+        ft = fulfill_types[0]
+        delivery_config = {
+            "deliveryId": ft.get("deliveryId"),
+            "deliveryNodeShipId": ft.get("id"),
+            "deliveryType": ft.get("deliveryType"),
+        }
+        # 商家配送需要运费模板
+        if ft.get("deliveryType") == 1 and freight_templates:
+            delivery_config["templateId"] = freight_templates[0].get("templateId")
+
+    db_products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    if not db_products:
+        raise HTTPException(status_code=404, detail="未找到选中的产品")
+
+    results = {"success": [], "failed": []}
+
+    for product in db_products:
+        try:
+            # 从蔚蓝医药获取完整商品详情（图片、描述等）
+            source_detail = None
+            if product.wemall_product_id:
+                try:
+                    detail_result = await source_api.get_product_detail(product.wemall_product_id)
+                    source_detail = detail_result.get("goods", {})
+                except Exception:
+                    pass
+
+            # 图片：优先用源店铺详情里的图片（微盟内部URL），否则用数据库里的
+            if source_detail:
+                image_url = source_detail.get("defaultImageUrl", "") or product.image_url or ""
+                goods_image_urls = source_detail.get("goodsImageUrl", [])
+                if not goods_image_urls and image_url:
+                    goods_image_urls = [image_url]
+                goods_desc = source_detail.get("goodsDesc", "")
+                sub_title = source_detail.get("subTitle", "")
+            else:
+                image_url = product.image_url or ""
+                goods_image_urls = [image_url] if image_url else []
+                goods_desc = ""
+                sub_title = ""
+
+            sale_price = str(product.retail_price) if product.retail_price else "0.01"
+
+            create_payload = {
+                "basicInfo": {"vid": target_vid},
+                "title": product.name,
+                "subTitle": sub_title,
+                "outerGoodsCode": product.sku or "",
+                "categoryId": category_id,
+                "goodsTemplateId": template_id,
+                "goodsType": 1,
+                "subGoodsType": 101,
+                "deductStockType": 1,
+                "defaultImageUrl": image_url,
+                "goodsImageUrl": goods_image_urls if goods_image_urls else [image_url] if image_url else [],
+                "goodsDesc": goods_desc,
+                "isMultiSku": False,
+                "isOnline": True,
+                "initSales": 0,
+                "wid": wid,
+                "skuList": [{
+                    "salePrice": sale_price,
+                    "skuStockNum": 9999,
+                    "outerSkuCode": product.sku or "",
+                    "skuPreStockNum": 0,
+                }],
+                "performanceWay": {
+                    "deliveryList": [delivery_config] if delivery_config else [],
+                },
+            }
+
+            result = await target_api.create_goods(create_payload)
+            results["success"].append({
+                "product_id": product.id,
+                "name": product.name,
+                "goods_id": result.get("goodsId"),
+            })
+        except Exception as e:
+            results["failed"].append({
+                "product_id": product.id,
+                "name": product.name,
+                "error": str(e),
+            })
+
+    return results
+
+
 @router.post("/import-supply-price")
 async def import_supply_price(
     file: UploadFile = File(...),
