@@ -71,9 +71,30 @@ async def sync_orders(
                     existing.shipping_status = shipping_status
                     if shipping_status == ShippingStatus.returned:
                         existing.is_refunded = True
-                    # 如果已有订单的商品条目缺少零售价，也补录上
+                    # 补录：重新匹配 product_id 和 supply_price
                     if items_list and existing.items:
                         for ex_item in existing.items:
+                            # 如果 product_id 为空，尝试重新匹配
+                            if ex_item.product_id is None:
+                                sku_code = str(ex_item.sku or "").strip()
+                                matched_product = None
+                                # 先按 goodsCode/skuCode 匹配
+                                for item_data in items_list:
+                                    if str(item_data.get("skuId", "")) == (ex_item.sku or ""):
+                                        gc = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
+                                        if gc:
+                                            matched_product = db.query(Product).filter(Product.sku == gc).first()
+                                        if not matched_product:
+                                            gid = str(item_data.get("goodsId", ""))
+                                            if gid:
+                                                matched_product = db.query(Product).filter(Product.wemall_product_id == gid).first()
+                                        break
+                                if matched_product:
+                                    ex_item.product_id = matched_product.id
+                                    if matched_product.supply_price and not ex_item.supply_price:
+                                        ex_item.supply_price = matched_product.supply_price
+                                        ex_item.supply_subtotal = matched_product.supply_price * ex_item.quantity
+                            # 补录零售价
                             if ex_item.retail_price is None or float(ex_item.retail_price) == 0:
                                 for item_data in items_list:
                                     if str(item_data.get("skuId", "")) == (ex_item.sku or ""):
@@ -104,7 +125,14 @@ async def sync_orders(
 
                 for item_data in items_list:
                     goods_id = str(item_data.get("goodsId", ""))
-                    product = db.query(Product).filter(Product.wemall_product_id == goods_id).first() if goods_id else None
+                    sku_code = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
+
+                    # 匹配产品：优先用 SKU 编码匹配，再用 goodsId
+                    product = None
+                    if sku_code:
+                        product = db.query(Product).filter(Product.sku == sku_code).first()
+                    if not product and goods_id:
+                        product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
 
                     qty = int(item_data.get("skuNum", 1))
                     # 尝试多个价格字段名（微盟API字段名可能不同）
@@ -117,7 +145,7 @@ async def sync_orders(
                         order_id=order.id,
                         product_id=product.id if product else None,
                         product_name=item_data.get("goodsTitle", "未知商品"),
-                        sku=str(item_data.get("skuId", "")),
+                        sku=sku_code or str(item_data.get("skuId", "")),
                         quantity=qty,
                         retail_price=retail_price,
                         supply_price=supply_price,
