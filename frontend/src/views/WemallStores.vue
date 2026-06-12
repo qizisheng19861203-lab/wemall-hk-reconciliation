@@ -43,6 +43,11 @@
       </el-table-column>
       <el-table-column label="Shop ID" prop="shop_id" width="140" />
       <el-table-column label="备注" prop="notes" min-width="140" show-overflow-tooltip />
+      <el-table-column label="上线打印" width="100" align="center">
+        <template #default="{ row }">
+          <el-switch v-model="row.print_enabled" @change="togglePrint(row)" size="small" />
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="260">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
@@ -257,6 +262,16 @@ async function activateStore(row) {
     ElMessage.error('切换失败：' + e.message)
   } finally {
     activatingId.value = null
+  }
+}
+
+async function togglePrint(row) {
+  try {
+    const data = await http.post(`/admin/wemall-stores/${row.id}/toggle-print`)
+    ElMessage.success(`${row.name} 打印已${data.print_enabled ? '开启' : '关闭'}`)
+  } catch (e) {
+    row.print_enabled = !row.print_enabled
+    ElMessage.error('操作失败：' + e.message)
   }
 }
 

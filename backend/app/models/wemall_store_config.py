@@ -14,5 +14,6 @@ class WemallStoreConfig(Base):
     shop_id = Column(String(50), nullable=True)         # 店铺 shop_id（可选）
     notes = Column(String(300), nullable=True)          # 备注说明
     is_active = Column(Boolean, default=False, nullable=False)  # 当前激活使用的配置
+    print_enabled = Column(Boolean, default=False, nullable=False, comment="上线打印开关：开启后已付款订单自动推送到快递云打印")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

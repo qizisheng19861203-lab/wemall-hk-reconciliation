@@ -39,6 +39,7 @@ class StoreOut(BaseModel):
     shop_id: Optional[str]
     notes: Optional[str]
     is_active: bool
+    print_enabled: bool = False
 
     class Config:
         from_attributes = True
@@ -62,6 +63,7 @@ def _to_out(store: WemallStoreConfig) -> StoreOut:
         shop_id=store.shop_id,
         notes=store.notes,
         is_active=store.is_active,
+        print_enabled=store.print_enabled if store.print_enabled is not None else False,
     )
 
 
@@ -188,6 +190,21 @@ async def activate_store(
     db.refresh(store)
 
     return {"ok": True, "active_store": _to_out(store)}
+
+
+@router.post("/{store_id}/toggle-print")
+def toggle_print(
+    store_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_admin),
+):
+    """切换店铺的上线打印开关"""
+    store = db.query(WemallStoreConfig).filter(WemallStoreConfig.id == store_id).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="店铺配置不存在")
+    store.print_enabled = not store.print_enabled
+    db.commit()
+    return {"ok": True, "print_enabled": store.print_enabled}
 
 
 @router.post("/{store_id}/test")
