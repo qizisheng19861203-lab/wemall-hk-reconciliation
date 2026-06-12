@@ -243,7 +243,7 @@ class WemallAPI:
         return all_templates
 
     async def get_product_detail(self, goods_id: str) -> dict:
-        """获取商品详情"""
+        """获取商品详情（含规格/SKU/库存/图片/详情）"""
         vid = await self._get_organization_vid()
         payload = {
             "goodsId": int(goods_id),
@@ -251,4 +251,4 @@ class WemallAPI:
                 "vid": vid,
             },
         }
-        return await self._request("goods/detail/get", payload)
+        return await self._request("goods/get", payload)

@@ -370,15 +370,8 @@ async def push_products_to_store(
     if not wid:
         raise HTTPException(status_code=502, detail="无法获取目标店铺管理员 wid")
 
-    # 找二级类目（优先取第一个有 children 的）
-    category_id = None
-    for cat in categories:
-        children = cat.get("children", [])
-        if children:
-            category_id = children[0].get("categoryId")
-            break
-    if not category_id:
-        category_id = categories[0].get("categoryId")
+    # 找二级类目：固定使用「食品→营养保健」(categoryId=30)
+    category_id = 30
 
     template_id = templates[0].get("id")
 
@@ -394,6 +387,34 @@ async def push_products_to_store(
         if freight_templates:
             delivery_config["templateId"] = freight_templates[0].get("templateId")
 
+    # 获取目标店铺已有的所有规格值（逐个取详情直到收集够）
+    target_spec_values = {}  # {specValueName: {specId, specValueId}}
+    target_spec_id = None
+    try:
+        target_products = await target_api.get_products(page=1, page_size=20)
+        specs_found_from = 0
+        for tp in target_products.get("pageList", []):
+            tp_detail = await target_api.get_product_detail(str(tp.get("goodsId")))
+            has_spec = False
+            for spec in tp_detail.get("specInfoList", []):
+                if not target_spec_id:
+                    target_spec_id = spec.get("specId")
+                for sv in spec.get("skuSpecValueList", []):
+                    name = sv.get("specValueName", "")
+                    if name and name not in target_spec_values:
+                        target_spec_values[name] = {
+                            "specId": spec.get("specId"),
+                            "specValueId": sv.get("specValueId"),
+                        }
+                        has_spec = True
+            if has_spec:
+                specs_found_from += 1
+            # 从5个不同产品收集到规格值就够了
+            if specs_found_from >= 5:
+                break
+    except Exception:
+        pass
+
     db_products = db.query(Product).filter(Product.id.in_(product_ids)).all()
     if not db_products:
         raise HTTPException(status_code=404, detail="未找到选中的产品")
@@ -402,30 +423,141 @@ async def push_products_to_store(
 
     for product in db_products:
         try:
-            # 从蔚蓝医药获取完整商品详情（图片、描述等）
+            # 从蔚蓝医药获取完整商品详情（规格/SKU/库存/图片/详情）
             source_detail = None
             if product.wemall_product_id:
                 try:
-                    detail_result = await source_api.get_product_detail(product.wemall_product_id)
-                    source_detail = detail_result.get("goods", {})
+                    source_detail = await source_api.get_product_detail(product.wemall_product_id)
                 except Exception:
                     pass
 
-            # 图片：优先用源店铺详情里的图片（微盟内部URL），否则用数据库里的
             if source_detail:
                 image_url = source_detail.get("defaultImageUrl", "") or product.image_url or ""
                 goods_image_urls = source_detail.get("goodsImageUrl", [])
                 if not goods_image_urls and image_url:
                     goods_image_urls = [image_url]
-                goods_desc = source_detail.get("goodsDesc", "")
-                sub_title = source_detail.get("subTitle", "")
+                goods_desc = source_detail.get("goodsDesc", "") or ""
+                sub_title = source_detail.get("subTitle", "") or ""
+                is_multi_sku = source_detail.get("isMultiSku", False)
+                source_spec_list = source_detail.get("specInfoList", [])
+                source_sku_list = source_detail.get("skuList", [])
             else:
                 image_url = product.image_url or ""
                 goods_image_urls = [image_url] if image_url else []
                 goods_desc = ""
                 sub_title = ""
+                is_multi_sku = False
+                source_spec_list = []
+                source_sku_list = []
 
             sale_price = str(product.retail_price) if product.retail_price else "0.01"
+
+            # 构建规格和SKU：必须使用目标店铺已有的specId/specValueId
+            spec_info_list = []
+            if is_multi_sku and source_spec_list and source_sku_list and target_spec_values:
+                # 匹配源规格值到目标已有值
+                def _match_spec_value(name):
+                    """模糊匹配规格值名称到目标店铺已有的specValueId"""
+                    if name in target_spec_values:
+                        return target_spec_values[name]
+                    # 去括号内容匹配
+                    base = name.split("(")[0].split("（")[0].strip()
+                    if base in target_spec_values:
+                        return target_spec_values[base]
+                    # 关键字匹配
+                    if "直邮" in name:
+                        for k, v in target_spec_values.items():
+                            if "直邮" in k:
+                                return v
+                    if "现货" in name:
+                        for k, v in target_spec_values.items():
+                            if "现货" in k and "香港" not in k:
+                                return v
+                    if "香港" in name:
+                        for k, v in target_spec_values.items():
+                            if "香港" in k:
+                                return v
+                    # 默认返回第一个
+                    first = list(target_spec_values.values())
+                    return first[0] if first else None
+
+                # 建立映射：源(specId, specValueId) → 目标specValueId
+                src_to_target = {}
+                used_target_values = []
+                for spec in source_spec_list:
+                    src_sid = spec.get("specId")
+                    for sv in spec.get("skuSpecValueList", []):
+                        src_vid = sv.get("specValueId")
+                        matched = _match_spec_value(sv.get("specValueName", ""))
+                        if matched:
+                            src_to_target[(src_sid, src_vid)] = matched
+                            if matched not in used_target_values:
+                                used_target_values.append(matched)
+
+                if used_target_values and target_spec_id:
+                    spec_info_list = [{
+                        "specId": target_spec_id,
+                        "specName": "规格",
+                        "skuSpecValueList": [
+                            {"specValueId": v["specValueId"], "specValueName": k}
+                            for k, v in target_spec_values.items()
+                            if v in used_target_values
+                        ],
+                    }]
+
+                    sku_list = []
+                    seen_codes = set()
+                    seen_spec_combos = set()
+                    for idx, src_sku in enumerate(source_sku_list):
+                        if src_sku.get("isDisabled"):
+                            continue
+                        outer_code = src_sku.get("outerSkuCode", "") or ""
+                        # 多SKU不能共用同一个outerSkuCode，加后缀区分
+                        if outer_code in seen_codes:
+                            outer_code = f"{outer_code}-{idx+1}" if outer_code else ""
+                        if outer_code:
+                            seen_codes.add(outer_code)
+                        sku_entry = {
+                            "salePrice": sale_price,
+                            "skuStockNum": src_sku.get("skuStockNum", 0),
+                            "outerSkuCode": outer_code,
+                            "skuPreStockNum": 0,
+                            "skuSpecValueList": [],
+                        }
+                        for sv in src_sku.get("skuSpecValueList", []):
+                            key = (sv.get("specId"), sv.get("specValueId"))
+                            matched = src_to_target.get(key)
+                            if matched:
+                                sku_entry["skuSpecValueList"].append({
+                                    "specId": matched["specId"],
+                                    "specValueId": matched["specValueId"],
+                                })
+                        if sku_entry["skuSpecValueList"]:
+                            # 去重：不允许两个SKU指向同一个specValueId组合
+                            combo_key = tuple(sv["specValueId"] for sv in sku_entry["skuSpecValueList"])
+                            if combo_key not in seen_spec_combos:
+                                seen_spec_combos.add(combo_key)
+                                sku_list.append(sku_entry)
+
+                    if not sku_list:
+                        # 匹配失败，降级为单SKU
+                        stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
+                        sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
+                        is_multi_sku = False
+                        spec_info_list = []
+                    else:
+                        # 确保 skuList 数量不超过 specInfoList 中规格值组合数
+                        max_skus = len(spec_info_list[0]["skuSpecValueList"]) if spec_info_list else 1
+                        if len(sku_list) > max_skus:
+                            sku_list = sku_list[:max_skus]
+                else:
+                    # 没有可用的目标规格值，降级为单SKU
+                    stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
+                    sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
+                    is_multi_sku = False
+            else:
+                stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
+                sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
 
             create_payload = {
                 "basicInfo": {"vid": target_vid},
@@ -435,25 +567,22 @@ async def push_products_to_store(
                 "categoryId": category_id,
                 "goodsTemplateId": template_id,
                 "goodsType": 1,
-                "subGoodsType": 101,
+                "subGoodsType": 102,
                 "deductStockType": 1,
                 "defaultImageUrl": image_url,
                 "goodsImageUrl": goods_image_urls if goods_image_urls else [image_url] if image_url else [],
                 "goodsDesc": goods_desc,
-                "isMultiSku": False,
+                "isMultiSku": is_multi_sku,
                 "isOnline": True,
                 "initSales": 0,
                 "wid": wid,
-                "skuList": [{
-                    "salePrice": sale_price,
-                    "skuStockNum": 9999,
-                    "outerSkuCode": product.sku or "",
-                    "skuPreStockNum": 0,
-                }],
+                "skuList": sku_list,
                 "performanceWay": {
                     "deliveryList": [delivery_config] if delivery_config else [],
                 },
             }
+            if spec_info_list:
+                create_payload["specInfoList"] = spec_info_list
 
             result = await target_api.create_goods(create_payload)
             results["success"].append({
