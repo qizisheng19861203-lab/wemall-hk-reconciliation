@@ -214,16 +214,19 @@ class WemallAPI:
         return await self._request("goods/create", payload)
 
     async def get_employee_wid(self) -> int:
-        """获取管理员 wid"""
+        """获取管理员 wid（通过 employee/getList）"""
         token = await self._get_access_token()
-        url = f"https://dopen.weimob.com/apigw/bos/v2.0/employee/get?accesstoken={token}"
+        url = f"https://dopen.weimob.com/apigw/bos/v2.0/employee/getList?accesstoken={token}"
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json={})
+            resp = await client.post(url, json={"pageNum": 1, "pageSize": 10})
             resp.raise_for_status()
             data = resp.json()
             if data.get("code", {}).get("errcode") != "0":
-                raise Exception(f"获取员工信息失败: {data.get('code', {}).get('errmsg')}")
-            return data.get("data", {}).get("wid")
+                raise Exception(f"获取员工列表失败: {data.get('code', {}).get('errmsg')}")
+            employees = data.get("data", {}).get("data", [])
+            if not employees:
+                raise Exception("员工列表为空")
+            return employees[0].get("wid")
 
     async def get_freight_templates(self) -> list:
         """获取商家配送运费模板列表"""
