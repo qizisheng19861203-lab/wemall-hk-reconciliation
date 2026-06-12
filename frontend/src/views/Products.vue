@@ -81,9 +81,9 @@
       </el-table>
       </div><!-- end loading wrapper -->
       <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:13px;color:#909399">共 {{ displayTotal }} 个产品</span>
+        <span style="font-size:13px;color:#909399">共 {{ displayTotal }} 个产品，每页 {{ pageSize }} 个</span>
         <el-pagination v-model:current-page="page" :page-size="pageSize"
-          :total="displayTotal" layout="prev, pager, next" @current-change="load" />
+          :total="displayTotal" layout="prev, pager, next" @current-change="() => {}" />
       </div>
     </el-card>
 

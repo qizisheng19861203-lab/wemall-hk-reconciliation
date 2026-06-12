@@ -293,7 +293,7 @@ async def get_target_store_skus(
     page = 1
     try:
         while True:
-            result = await api.get_products(page=page, page_size=50)
+            result = await api.get_products(page=page, page_size=20)
             products_data = result.get("pageList", [])
             if not products_data:
                 break
@@ -302,7 +302,7 @@ async def get_target_store_skus(
                 if sku:
                     all_skus.add(sku)
             total_count = result.get("totalCount", 0)
-            if page * 50 >= total_count:
+            if page * 20 >= total_count:
                 break
             page += 1
     except Exception as e:
