@@ -193,10 +193,14 @@ docker compose -f /opt/wemall-hk/docker-compose.yml logs -f backend
 docker compose -f /opt/wemall-hk/docker-compose.yml restart
 ```
 
-### 代码推送（自动触发部署）
+### 代码推送 + 部署
 ```bash
+# 部署（本地一条命令）
+./deploy.sh          # 快速部署：build前端 + rsync + restart
+./deploy.sh --full   # 完整部署：rebuild docker 镜像（改了 requirements.txt 时用）
+
+# 代码备份到 GitHub（不触发部署）
 git add . && git commit -m "描述" && git push
-# GitHub Actions 自动 SSH 到服务器重新部署
 ```
 
 ---
@@ -303,10 +307,12 @@ git add . && git commit -m "描述" && git push
 - 服务器 static 路径：`/opt/wemall-hk/static/`，挂载到容器 `/app/static/`
 
 ### 部署流程
-- **自动部署**：push 到 main 分支，GitHub Actions 自动 SSH 到服务器 pull + restart
-- **前端**：在本地 Mac 执行 `npm run build`，dist/ 由 Actions 同步到服务器
-- **后端**：代码由 Actions rsync，然后 `docker compose restart backend`
-- **重要**：每次改 requirements.txt 都需要重建镜像（`docker compose up -d --build backend`）
+- **本地脚本部署**：`./deploy.sh`（默认快速部署）或 `./deploy.sh --full`（rebuild 镜像）
+- **前端**：deploy.sh 自动在本地 `npm run build`，rsync dist 到服务器
+- **后端**：deploy.sh 自动 rsync 代码，SSH 重启容器
+- **重要**：改了 requirements.txt 必须用 `./deploy.sh --full`（会 rebuild docker 镜像）
+- **GitHub Actions 已禁用**（`.github/workflows/deploy.yml.disabled`），push 不再触发 CI
+- 代码仍推 GitHub 做备份，但部署和代码托管已分离
 
 ### ⚠️ 腾讯云服务器网络限制
 **服务器无法访问外网**，所有安装必须走国内镜像：
@@ -505,16 +511,15 @@ ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
 
 ### 标准部署命令
 ```bash
-# 只改了后端代码（不改 requirements.txt）
-ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
-  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose restart backend"
+# 常规部署（本地执行，一条命令搞定）
+./deploy.sh
 
-# 改了前端代码（前端已在本地 build，dist 由 Actions 同步）
-# → 直接 git push，Actions 自动处理
+# 改了 requirements.txt 时（需重建镜像）
+./deploy.sh --full
 
-# 改了 requirements.txt（需重建后端镜像）
+# 紧急情况：只重启后端（不同步代码）
 ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121 \
-  "cd /opt/wemall-hk && git checkout -- . && git pull && docker compose up -d --build backend"
+  "cd /opt/wemall-hk && docker compose restart backend"
 ```
 
 ### 数据库直接操作
