@@ -124,6 +124,14 @@ DELETE FROM settlements WHERE wemall_store_id = 1;
 - 以产品库的零售价（retail_price）作为倍赛思甄选的销售价
 - 调用微盟 `weimob_shop/goods/create` 接口创建商品
 - 配送方式等细节可事后在倍赛思甄选微盟后台调整
+- **产品类型固定为海淘（subGoodsType=102）**，不是普通实物商品
+- **商品详情接口用 `goods/get`**（不是 `goods/detail/get`，后者返回空数据）
+- **多SKU/规格同步**：从源店铺复制 specInfoList 和 skuList，使用目标店铺已有的 specId/specValueId
+- 规格值匹配逻辑：精确名称→去括号匹配→关键字（直邮/现货/香港）→默认第一个
+- SKU去重：同一specValueId组合不重复；skuList数量不超过specInfoList规格值数
+- outerSkuCode重复时自动加后缀（-2, -3...）
+- 真实库存从源店铺复制，不硬编码 9999
+- goodsDesc（富文本HTML详情页）完整传递
 - 实现文件：`wemall_api.py`（create_goods/get_goods_categories/get_goods_templates/get_fulfill_types/get_employee_wid/get_freight_templates）、`products.py`（push-to-store 端点）
 
 ### 自动任务（scheduler.py）
