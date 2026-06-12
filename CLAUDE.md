@@ -112,7 +112,9 @@ DELETE FROM settlements WHERE wemall_store_id = 1;
 - 支持 Excel 批量导入供货价（优先用商品编码匹配）
 - 同步微盟产品（默认 20 个，可选全部）——**固定用蔚蓝医药凭证**
 - 供货价为空时显示"待录价"警告
+- **UPC/SKU 是最根本的外键**：产品匹配、订单商品关联、跨店铺同步判断，全部以 SKU（即 UPC 商品编码/outerGoodsCode）为唯一标识
 - 产品去重逻辑：以 SKU（outerGoodsCode）为唯一标识，同步时先按 SKU 查找，找不到再按 wemall_product_id，都找不到才新增
+- 「已同步甄选」判断：产品库的 SKU 在倍赛思甄选的 `outerGoodsCode` 中存在 = 已同步
 - 编辑弹窗内有「删除产品」按钮（有订单记录则拒绝，提示改停用）
 
 ### 产品推送到倍赛思甄选（Products.vue）
