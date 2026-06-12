@@ -29,6 +29,7 @@ class OrderResponse(BaseModel):
     shipping_status: ShippingStatus
     tracking_number: Optional[str]
     is_refunded: bool
+    is_test: bool = False
     refund_amount: Decimal
     refund_date: Optional[datetime]
     refund_reason: Optional[str]
@@ -45,6 +46,7 @@ class OrderUpdate(BaseModel):
     shipping_status: Optional[ShippingStatus] = None
     tracking_number: Optional[str] = None
     is_refunded: Optional[bool] = None
+    is_test: Optional[bool] = None
     refund_amount: Optional[Decimal] = None
     refund_date: Optional[datetime] = None
     refund_reason: Optional[str] = None

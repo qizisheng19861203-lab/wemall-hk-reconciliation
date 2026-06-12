@@ -24,6 +24,7 @@ class Order(Base):
     shipping_status = Column(Enum(ShippingStatus), default=ShippingStatus.pending)
     tracking_number = Column(String(100), nullable=True)
     is_refunded = Column(Boolean, default=False)
+    is_test = Column(Boolean, default=False, comment="测试订单，不计入结算")
     refund_amount = Column(Numeric(10, 2), default=0, comment="退款金额(RMB)")
     refund_date = Column(DateTime(timezone=True), nullable=True)
     refund_reason = Column(Text, nullable=True)

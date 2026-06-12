@@ -67,6 +67,7 @@ def create_settlement(
     orders = db.query(Order).filter(
         Order.id.in_(payload.order_ids),
         Order.settlement_id == None,
+        Order.is_test == False,
     ).options(joinedload(Order.items)).all()
 
     if not orders:

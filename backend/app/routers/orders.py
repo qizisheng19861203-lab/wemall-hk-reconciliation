@@ -91,14 +91,14 @@ def get_order_stats(
     orders = q.options(joinedload(Order.items)).all()
     total_supply = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
-        for o in orders if not o.is_refunded
+        for o in orders if not o.is_refunded and not o.is_test
     )
-    total_refund = sum(o.refund_amount or 0 for o in orders if o.is_refunded)
+    total_refund = sum(o.refund_amount or 0 for o in orders if o.is_refunded and not o.is_test)
 
     # 未结算：没有 settlement_id 的订单
     unsettled = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
-        for o in orders if not o.is_refunded and not o.settlement_id
+        for o in orders if not o.is_refunded and not o.settlement_id and not o.is_test
     )
 
     # 已确认收款（真正结清）：settlement.status = 'settled'
@@ -112,7 +112,7 @@ def get_order_stats(
         }
     confirmed_settled = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
-        for o in orders if not o.is_refunded and o.settlement_id in confirmed_ids
+        for o in orders if not o.is_refunded and not o.is_test and o.settlement_id in confirmed_ids
     )
 
     return {

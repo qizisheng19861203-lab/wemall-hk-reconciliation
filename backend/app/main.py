@@ -38,6 +38,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE settlements ADD COLUMN wemall_store_id INT NULL COMMENT '来源微盟店铺ID'"))
         except Exception:
             pass  # column already exists
+        # 给 orders 表加测试订单标记
+        try:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN is_test TINYINT(1) NOT NULL DEFAULT 0 COMMENT '测试订单，不计入结算'"))
+        except Exception:
+            pass  # column already exists
         conn.commit()
         # 旧结算单全部标记为店铺 1（我的店铺主店）
         conn.execute(text("UPDATE settlements SET wemall_store_id = 1 WHERE wemall_store_id IS NULL"))

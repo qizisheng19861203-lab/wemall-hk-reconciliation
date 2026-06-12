@@ -128,7 +128,12 @@
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
       <el-table :data="flatRows" stripe :span-method="spanMethod" border style="font-size:14px">
-        <el-table-column prop="wemall_order_id" label="订单号" width="165" />
+        <el-table-column prop="wemall_order_id" label="订单号" width="165">
+          <template #default="{ row }">
+            <span>{{ row.wemall_order_id }}</span>
+            <el-tag v-if="row.is_test" type="info" size="small" style="margin-left:4px">测试</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="下单日期" width="100">
           <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
         </el-table-column>
@@ -212,6 +217,10 @@
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="editForm.notes" type="textarea" />
+        </el-form-item>
+        <el-form-item label="测试订单">
+          <el-switch v-model="editForm.is_test" />
+          <span style="font-size:12px;color:#909399;margin-left:8px">标记后不计入结算金额</span>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -468,6 +477,7 @@ function openEdit(row) {
     tracking_number: row.tracking_number || '',
     is_refunded: row.is_refunded,
     refund_amount: row.refund_amount,
+    is_test: row.is_test || false,
     notes: row.notes || '',
   })
   editDialog.value = true
