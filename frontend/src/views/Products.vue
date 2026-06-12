@@ -15,8 +15,8 @@
           <el-button type="success">导入供货价</el-button>
         </el-upload>
         <el-button type="primary" @click="openAdd" :icon="Plus">新增产品</el-button>
-        <el-button type="success" @click="syncRecentProducts" :loading="syncingRecent">同步最近20个产品</el-button>
-        <el-button @click="syncProducts" :loading="syncing">同步全部产品</el-button>
+        <el-button type="success" @click="syncRecentProducts" :loading="syncingRecent">同步蔚蓝最近20个产品</el-button>
+        <el-button @click="syncProducts" :loading="syncing">同步全部蔚蓝产品</el-button>
         <el-button type="warning" @click="pushToStore" :disabled="!selectedProducts.length" :loading="pushing">
           同步到倍赛思甄选 ({{ selectedProducts.length }})
         </el-button>
@@ -28,12 +28,12 @@
         <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px"
           @clear="load" @keydown.enter.prevent="load" />
         <el-button @click="load">搜索</el-button>
-        <el-radio-group v-model="syncFilter" @change="load" style="margin-left:12px">
-          <el-radio-button value="all">全部</el-radio-button>
-          <el-radio-button value="synced">已同步甄选</el-radio-button>
-          <el-radio-button value="unsynced">未同步</el-radio-button>
-        </el-radio-group>
-        <el-button size="small" @click="refreshTargetSkus" :loading="loadingSkus" style="margin-left:8px">刷新同步状态</el-button>
+        <el-select v-model="syncFilter" @change="onFilterChange" style="width:200px">
+          <el-option value="all" :label="`全部 (${totalCount})`" />
+          <el-option value="synced" :label="`已同步甄选 (${syncedCount})`" />
+          <el-option value="unsynced" :label="`未同步 (${unsyncedCount})`" />
+        </el-select>
+        <el-button size="small" @click="refreshTargetSkus" :loading="loadingSkus">刷新同步状态</el-button>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
       </div>
       <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
@@ -41,7 +41,7 @@
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
-      <el-table :data="filteredProducts" stripe @selection-change="handleSelectionChange">
+      <el-table :data="pagedProducts" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" v-if="auth.isAdmin" />
         <el-table-column label="图片" width="70">
           <template #default="{ row }">
@@ -80,6 +80,11 @@
         </el-table-column>
       </el-table>
       </div><!-- end loading wrapper -->
+      <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:#909399">共 {{ displayTotal }} 个产品</span>
+        <el-pagination v-model:current-page="page" :page-size="pageSize"
+          :total="displayTotal" layout="prev, pager, next" @current-change="load" />
+      </div>
     </el-card>
 
     <el-dialog v-model="dialog" :title="editingId ? '编辑产品' : '新增产品'" width="520px" destroy-on-close :teleported="false">
@@ -130,15 +135,23 @@ const editingId = ref(null)
 const keyword = ref('')
 const form = reactive({ name: '', sku: '', category: '', retail_price: null, supply_price: null, image_url: '', notes: '', is_active: true })
 const selectedProducts = ref([])
-const syncFilter = ref('all')
+const syncFilter = ref('synced')
 const targetSkus = ref(new Set())
 const loadingSkus = ref(false)
+const page = ref(1)
+const pageSize = 50
+const totalCount = computed(() => products.value.length)
+
+const syncedCount = computed(() => products.value.filter(p => targetSkus.value.has(p.sku)).length)
+const unsyncedCount = computed(() => products.value.filter(p => !targetSkus.value.has(p.sku)).length)
 
 const filteredProducts = computed(() => {
   if (syncFilter.value === 'all') return products.value
   if (syncFilter.value === 'synced') return products.value.filter(p => targetSkus.value.has(p.sku))
   return products.value.filter(p => !targetSkus.value.has(p.sku))
 })
+
+const displayTotal = computed(() => filteredProducts.value.length)
 
 function handleSelectionChange(val) {
   selectedProducts.value = val
@@ -183,10 +196,21 @@ async function pushToStore() {
   } finally { pushing.value = false }
 }
 
+function onFilterChange() {
+  page.value = 1
+}
+
+const pagedProducts = computed(() => {
+  const list = filteredProducts.value
+  const start = (page.value - 1) * pageSize
+  return list.slice(start, start + pageSize)
+})
+
 async function load() {
   loading.value = true
   try {
-    products.value = await productsApi.list({ keyword: keyword.value || undefined })
+    const res = await productsApi.list({ keyword: keyword.value || undefined, skip: 0, limit: 9999 })
+    products.value = res.items || res
   } finally { loading.value = false }
 }
 

@@ -14,13 +14,13 @@ import io
 router = APIRouter(prefix="/products", tags=["产品管理"])
 
 
-@router.get("", response_model=List[ProductResponse])
+@router.get("")
 def list_products(
     keyword: Optional[str] = None,
     category: Optional[str] = None,
     is_active: Optional[bool] = True,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 50,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -31,7 +31,9 @@ def list_products(
         q = q.filter(Product.name.contains(keyword) | Product.sku.contains(keyword))
     if category:
         q = q.filter(Product.category == category)
-    return q.order_by(Product.id.desc()).offset(skip).limit(limit).all()
+    total = q.count()
+    items = q.order_by(Product.id.desc()).offset(skip).limit(limit).all()
+    return {"items": items, "total": total}
 
 
 @router.post("", response_model=ProductResponse)
