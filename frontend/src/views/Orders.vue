@@ -137,7 +137,20 @@
         <el-table-column label="下单日期" width="100">
           <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
         </el-table-column>
-        <el-table-column label="商品名称" min-width="150">
+        <el-table-column label="收件人" width="130">
+          <template #default="{ row }">
+            <div style="line-height:1.3">
+              <div>{{ row.buyer_name || '-' }}</div>
+              <div style="font-size:11px;color:#909399">{{ row.buyer_phone || '' }}</div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="地址" width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span style="font-size:12px;color:#606266">{{ row.shipping_address || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="商品名称" min-width="120">
           <template #default="{ row }">
             {{ row._item.product_name }}
           </template>
@@ -196,8 +209,11 @@
     </el-card>
 
     <!-- 编辑弹窗 -->
-    <el-dialog v-model="editDialog" title="编辑订单" width="500px" destroy-on-close>
+    <el-dialog v-model="editDialog" title="编辑订单" width="600px" destroy-on-close :teleported="false">
       <el-form :model="editForm" label-width="90px">
+        <el-form-item label="订单号">
+          <span style="font-weight:600">{{ editForm._order_id }}</span>
+        </el-form-item>
         <el-form-item label="发货状态">
           <el-select v-model="editForm.shipping_status">
             <el-option label="待发货" value="pending" />
@@ -209,11 +225,25 @@
         <el-form-item label="快递单号">
           <el-input v-model="editForm.tracking_number" />
         </el-form-item>
-        <el-form-item label="是否退款">
+        <el-form-item label="订单商品">
+          <div style="width:100%;border:1px solid #ebeef5;border-radius:4px;overflow:hidden">
+            <div v-for="item in editForm._items" :key="item.id"
+              style="padding:8px 12px;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:8px;justify-content:space-between">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.product_name }}</div>
+                <div style="font-size:11px;color:#909399">x{{ item.quantity }} | 供货价: {{ item.supply_price ? `¥${item.supply_price}` : '无' }}</div>
+              </div>
+              <el-tag v-if="item.product_id == null" type="info" size="small">非供货</el-tag>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="退款">
           <el-switch v-model="editForm.is_refunded" />
+          <span v-if="editForm.is_refunded" style="margin-left:8px;font-size:12px;color:#F56C6C">已退款</span>
         </el-form-item>
         <el-form-item label="退款金额" v-if="editForm.is_refunded">
           <el-input-number v-model="editForm.refund_amount" :precision="2" :min="0" />
+          <el-button size="small" style="margin-left:8px" @click="setFullRefund">全额退款</el-button>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="editForm.notes" type="textarea" />
@@ -378,9 +408,9 @@ const flatRows = computed(() => {
   return rows
 })
 
-// 列索引: 订单号[0] 日期[1] 商品名[2] 数量[3] 供货单价[4] 供货小计[5] 客户支付[6] 退款[7] 结算[8] 操作[9]
-// 合并整订单行的列（跨商品条目合并）：订单号、日期、退款、结算、操作
-const MERGE_COLS = [0, 1, 7, 8, 9]
+// 列索引: 订单号[0] 日期[1] 收件人[2] 地址[3] 商品名[4] 数量[5] 供货单价[6] 供货小计[7] 客户支付[8] 退款[9] 结算[10] 操作[11]
+// 合并整订单行的列（跨商品条目合并）：订单号、日期、收件人、地址、退款、结算、操作
+const MERGE_COLS = [0, 1, 2, 3, 9, 10, 11]
 function spanMethod({ rowIndex, columnIndex }) {
   if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
   const row = flatRows.value[rowIndex]
@@ -473,6 +503,8 @@ function resetFilter() {
 function openEdit(row) {
   editingId.value = row.id
   Object.assign(editForm, {
+    _order_id: row.wemall_order_id,
+    _items: row.items || [],
     shipping_status: row.shipping_status,
     tracking_number: row.tracking_number || '',
     is_refunded: row.is_refunded,
@@ -481,6 +513,12 @@ function openEdit(row) {
     notes: row.notes || '',
   })
   editDialog.value = true
+}
+
+function setFullRefund() {
+  const items = editForm._items || []
+  const total = items.reduce((sum, item) => sum + (Number(item.supply_subtotal) || 0), 0)
+  editForm.refund_amount = Number(total.toFixed(2))
 }
 
 async function saveEdit() {
