@@ -382,17 +382,16 @@ async def push_products_to_store(
 
     template_id = templates[0].get("id")
 
-    # 配送方式：取第一个配送方式
+    # 配送方式：固定使用「商家配送」(deliveryType=1)
     delivery_config = {}
-    if fulfill_types:
-        ft = fulfill_types[0]
+    merchant_delivery = next((ft for ft in fulfill_types if ft.get("deliveryType") == 1), None)
+    if merchant_delivery:
         delivery_config = {
-            "deliveryId": ft.get("deliveryId"),
-            "deliveryNodeShipId": ft.get("id"),
-            "deliveryType": ft.get("deliveryType"),
+            "deliveryId": merchant_delivery.get("deliveryId"),
+            "deliveryNodeShipId": merchant_delivery.get("id"),
+            "deliveryType": 1,
         }
-        # 商家配送需要运费模板
-        if ft.get("deliveryType") == 1 and freight_templates:
+        if freight_templates:
             delivery_config["templateId"] = freight_templates[0].get("templateId")
 
     db_products = db.query(Product).filter(Product.id.in_(product_ids)).all()
