@@ -28,6 +28,12 @@
         <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px"
           @clear="load" @keydown.enter.prevent="load" />
         <el-button @click="load">搜索</el-button>
+        <el-radio-group v-model="syncFilter" @change="load" style="margin-left:12px">
+          <el-radio-button value="all">全部</el-radio-button>
+          <el-radio-button value="synced">已同步甄选</el-radio-button>
+          <el-radio-button value="unsynced">未同步</el-radio-button>
+        </el-radio-group>
+        <el-button size="small" @click="refreshTargetSkus" :loading="loadingSkus" style="margin-left:8px">刷新同步状态</el-button>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
       </div>
       <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
@@ -35,7 +41,7 @@
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
-      <el-table :data="products" stripe @selection-change="handleSelectionChange">
+      <el-table :data="filteredProducts" stripe @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" v-if="auth.isAdmin" />
         <el-table-column label="图片" width="70">
           <template #default="{ row }">
@@ -59,6 +65,12 @@
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '启用' : '停用' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="甄选" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="targetSkus.has(row.sku)" type="success" size="small">已同步</el-tag>
+            <el-tag v-else type="info" size="small">未同步</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="80" v-if="auth.isAdmin">
@@ -99,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { Loading, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { products as productsApi } from '@/api'
@@ -118,9 +130,28 @@ const editingId = ref(null)
 const keyword = ref('')
 const form = reactive({ name: '', sku: '', category: '', retail_price: null, supply_price: null, image_url: '', notes: '', is_active: true })
 const selectedProducts = ref([])
+const syncFilter = ref('all')
+const targetSkus = ref(new Set())
+const loadingSkus = ref(false)
+
+const filteredProducts = computed(() => {
+  if (syncFilter.value === 'all') return products.value
+  if (syncFilter.value === 'synced') return products.value.filter(p => targetSkus.value.has(p.sku))
+  return products.value.filter(p => !targetSkus.value.has(p.sku))
+})
 
 function handleSelectionChange(val) {
   selectedProducts.value = val
+}
+
+async function refreshTargetSkus() {
+  loadingSkus.value = true
+  try {
+    const res = await productsApi.getTargetStoreSkus()
+    targetSkus.value = new Set(res.skus || [])
+  } catch (e) {
+    console.error('获取甄选同步状态失败', e)
+  } finally { loadingSkus.value = false }
 }
 
 async function pushToStore() {
@@ -267,5 +298,5 @@ function handleImportError(error) {
 }
 
 onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false; pushing.value = false })
-onMounted(load)
+onMounted(() => { load(); refreshTargetSkus() })
 </script>

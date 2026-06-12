@@ -280,6 +280,35 @@ def _get_wemall_target_api(db: Session) -> WemallAPI:
     )
 
 
+@router.get("/target-store-skus")
+async def get_target_store_skus(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """获取倍赛思甄选店铺已有的所有商品 SKU 列表"""
+    api = _get_wemall_target_api(db)
+    all_skus = set()
+    page = 1
+    try:
+        while True:
+            result = await api.get_products(page=page, page_size=50)
+            products_data = result.get("pageList", [])
+            if not products_data:
+                break
+            for item in products_data:
+                sku = str(item.get("outerGoodsCode", "") or "").strip()
+                if sku:
+                    all_skus.add(sku)
+            total_count = result.get("totalCount", 0)
+            if page * 50 >= total_count:
+                break
+            page += 1
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"查询倍赛思甄选商品失败: {str(e)}")
+
+    return {"skus": list(all_skus), "count": len(all_skus)}
+
+
 @router.get("/target-store-config")
 async def get_target_store_config(
     db: Session = Depends(get_db),

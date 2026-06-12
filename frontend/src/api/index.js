@@ -19,6 +19,7 @@ export const products = {
   remove: (id) => http.delete(`/products/${id}`),
   syncWemall: () => http.post('/products/sync-wemall'),
   getTargetStoreConfig: () => http.get('/products/target-store-config'),
+  getTargetStoreSkus: () => http.get('/products/target-store-skus'),
   pushToStore: (data) => http.post('/products/push-to-store', data),
 }
 
