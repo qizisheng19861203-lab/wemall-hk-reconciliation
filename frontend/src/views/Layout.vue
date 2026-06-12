@@ -26,10 +26,6 @@
           <el-breadcrumb>
             <el-breadcrumb-item>{{ pageTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
-          <div class="version-badge" v-if="backendVersion">
-            <span class="version-text">版本 {{ backendVersion }}</span>
-            <span class="update-time" v-if="updateTime">· 更新于 {{ updateTime }}</span>
-          </div>
         </div>
         <div class="header-right">
           <el-dropdown @command="handleCommand">

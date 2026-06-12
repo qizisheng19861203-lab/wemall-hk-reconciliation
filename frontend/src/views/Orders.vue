@@ -18,6 +18,10 @@
             <div style="font-size:13px;color:#8c6d00;margin-bottom:4px">订单数</div>
             <div style="font-size:20px;font-weight:600;color:#595959">{{ stats.total_orders }}</div>
           </div>
+          <div v-if="stats.total_refund_rmb > 0" style="border-left:1px solid #ffd591;padding-left:24px">
+            <div style="font-size:13px;color:#8c6d00;margin-bottom:4px">已退款</div>
+            <div style="font-size:20px;font-weight:600;color:#F56C6C">¥{{ stats.total_refund_rmb.toFixed(2) }}</div>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:#aaa">{{ lastRefreshText }}</span>
@@ -284,7 +288,7 @@ const statsLoading = ref(false)
 const lastRefreshTime = ref(null)
 const quickMode = ref('month')
 
-const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0 })
+const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0, total_refund_rmb: 0 })
 const periodStats = reactive({ loaded: false, total_supply_rmb: 0, confirmed_settled_rmb: 0, pending_settlement_rmb: 0, unsettled_rmb: 0, total_orders: 0 })
 
 const periodRangeLabel = computed(() => {
@@ -447,6 +451,7 @@ async function loadStats() {
     stats.unsettled_rmb = res.unsettled_rmb ?? 0
     stats.total_supply_rmb = res.total_supply_rmb ?? 0
     stats.total_orders = res.total_orders ?? 0
+    stats.total_refund_rmb = res.total_refund_rmb ?? 0
     lastRefreshTime.value = new Date()
   } finally {
     statsLoading.value = false
