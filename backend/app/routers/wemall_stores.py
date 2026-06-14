@@ -12,6 +12,28 @@ from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/admin/wemall-stores", tags=["wemall-stores"])
 
+# 公开接口（无需认证），供快递云打印查询打印开关
+public_router = APIRouter(prefix="/wemall-stores", tags=["wemall-stores-public"])
+
+_STORE_KEY_MAP = {
+    "beisi": "倍赛思",
+    "weilan": "蔚蓝医药",
+}
+
+
+@public_router.get("/print-enabled")
+def get_print_enabled(store: str, db: Session = Depends(get_db)):
+    """快递云打印用：查询店铺的上线打印开关（无需认证）"""
+    name_fragment = _STORE_KEY_MAP.get(store)
+    if not name_fragment:
+        raise HTTPException(status_code=404, detail="未知店铺")
+    config = db.query(WemallStoreConfig).filter(
+        WemallStoreConfig.name.like(f"%{name_fragment}%")
+    ).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="店铺配置不存在")
+    return {"store": store, "print_enabled": bool(config.print_enabled)}
+
 
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ from app.routers.orders import router as orders_router
 from app.routers.settlements import router as settlements_router, rates_router
 from app.routers.reports import router as reports_router
 from app.routers.notification_contacts import router as contacts_router
-from app.routers.wemall_stores import router as wemall_stores_router
+from app.routers.wemall_stores import router as wemall_stores_router, public_router as wemall_stores_public_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 from sqlalchemy import text
 import app.models  # ensure all models are imported for table creation
@@ -104,6 +104,7 @@ app.include_router(rates_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(contacts_router, prefix="/api")
 app.include_router(wemall_stores_router, prefix="/api")
+app.include_router(wemall_stores_public_router, prefix="/api")
 
 
 @app.get("/health")
