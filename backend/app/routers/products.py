@@ -311,6 +311,41 @@ async def get_target_store_skus(
     return {"skus": list(all_skus), "count": len(all_skus)}
 
 
+@router.get("/beisi-stock")
+async def get_beisi_stock(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """实时查询倍赛思甄选店铺所有商品库存（goodsStock.goodsStockNum，page_size最大20）"""
+    api = _get_wemall_target_api(db)
+    stock_map: dict = {}  # {sku: {"total_stock": N, "name": "..."}}
+    page = 1
+
+    try:
+        while True:
+            result = await api.get_products(page=page, page_size=20)
+            items = result.get("pageList", [])
+            if not items:
+                break
+            for item in items:
+                sku = str(item.get("outerGoodsCode", "") or "").strip()
+                if not sku:
+                    continue
+                name = item.get("title", "")
+                goods_stock = item.get("goodsStock") or {}
+                total_stock = goods_stock.get("goodsStockNum", -1)
+                stock_map[sku] = {"total_stock": int(total_stock), "name": name}
+            total_count = result.get("totalCount", 0)
+            if page * 20 >= total_count:
+                break
+            page += 1
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"查询倍赛思甄选商品失败: {str(e)}")
+
+    zero_skus = [sku for sku, info in stock_map.items() if info["total_stock"] == 0]
+    return {"items": stock_map, "zero_stock": zero_skus, "count": len(stock_map)}
+
+
 @router.get("/target-store-config")
 async def get_target_store_config(
     db: Session = Depends(get_db),

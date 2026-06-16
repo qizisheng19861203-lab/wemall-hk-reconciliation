@@ -20,6 +20,7 @@ export const products = {
   syncWemall: () => http.post('/products/sync-wemall'),
   getTargetStoreConfig: () => http.get('/products/target-store-config'),
   getTargetStoreSkus: () => http.get('/products/target-store-skus'),
+  getBeisiStock: () => http.get('/products/beisi-stock'),
   pushToStore: (data) => http.post('/products/push-to-store', data),
 }
 

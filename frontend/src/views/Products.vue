@@ -28,12 +28,15 @@
         <el-input v-model="keyword" placeholder="搜索产品名/SKU" clearable style="width:220px"
           @clear="load" @keydown.enter.prevent="load" />
         <el-button @click="load">搜索</el-button>
-        <el-select v-model="syncFilter" @change="onFilterChange" style="width:200px">
+        <el-select v-model="syncFilter" @change="onFilterChange" style="width:210px">
           <el-option value="all" :label="`全部 (${totalCount})`" />
           <el-option value="synced" :label="`已同步甄选 (${syncedCount})`" />
           <el-option value="unsynced" :label="`未同步 (${unsyncedCount})`" />
+          <el-option value="oos" :label="`完全缺货 (${oosCount})`" />
         </el-select>
         <el-button size="small" @click="refreshTargetSkus" :loading="loadingSkus">刷新同步状态</el-button>
+        <el-button size="small" @click="loadBeisiStock" :loading="loadingStock">刷新库存</el-button>
+        <el-tag v-if="loadingStock" type="info" size="small">库存加载中...</el-tag>
         <el-tag type="warning" style="margin-left:auto">⚠ 供货价仅管理员可编辑</el-tag>
       </div>
       <!-- 手动 loading 覆盖层：v-if 保证加载完成后立即从 DOM 消失，不留 pointer-events 残留 -->
@@ -71,6 +74,16 @@
           <template #default="{ row }">
             <el-tag v-if="targetSkus.has(row.sku)" type="success" size="small">已同步</el-tag>
             <el-tag v-else type="info" size="small">未同步</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="甄选库存" width="90" align="center">
+          <template #default="{ row }">
+            <template v-if="beisiStock.has(row.sku)">
+              <el-tag v-if="beisiStock.get(row.sku) === 0" type="danger" size="small">缺货</el-tag>
+              <span v-else style="font-size:13px;font-weight:600;color:#333">{{ beisiStock.get(row.sku) }}</span>
+            </template>
+            <span v-else-if="loadingStock" style="color:#C0C4CC;font-size:12px">...</span>
+            <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="80" v-if="auth.isAdmin">
@@ -138,17 +151,29 @@ const selectedProducts = ref([])
 const syncFilter = ref('synced')
 const targetSkus = ref(new Set())
 const loadingSkus = ref(false)
+const beisiStock = ref(new Map())  // sku → total_stock (number)
+const loadingStock = ref(false)
 const page = ref(1)
 const pageSize = 50
 const totalCount = computed(() => products.value.length)
 
 const syncedCount = computed(() => products.value.filter(p => targetSkus.value.has(p.sku)).length)
 const unsyncedCount = computed(() => products.value.filter(p => !targetSkus.value.has(p.sku)).length)
+const oosCount = computed(() => products.value.filter(p => beisiStock.value.has(p.sku) && beisiStock.value.get(p.sku) === 0).length)
 
 const filteredProducts = computed(() => {
-  if (syncFilter.value === 'all') return products.value
-  if (syncFilter.value === 'synced') return products.value.filter(p => targetSkus.value.has(p.sku))
-  return products.value.filter(p => !targetSkus.value.has(p.sku))
+  let list = products.value
+  if (syncFilter.value === 'synced') list = list.filter(p => targetSkus.value.has(p.sku))
+  else if (syncFilter.value === 'unsynced') list = list.filter(p => !targetSkus.value.has(p.sku))
+  else if (syncFilter.value === 'oos') list = list.filter(p => beisiStock.value.has(p.sku) && beisiStock.value.get(p.sku) === 0)
+  // Sort: 0-stock products first (缺货排最前)
+  return [...list].sort((a, b) => {
+    const sa = beisiStock.value.has(a.sku) ? beisiStock.value.get(a.sku) : Infinity
+    const sb = beisiStock.value.has(b.sku) ? beisiStock.value.get(b.sku) : Infinity
+    if (sa === 0 && sb !== 0) return -1
+    if (sa !== 0 && sb === 0) return 1
+    return 0
+  })
 })
 
 const displayTotal = computed(() => filteredProducts.value.length)
@@ -165,6 +190,20 @@ async function refreshTargetSkus() {
   } catch (e) {
     console.error('获取甄选同步状态失败', e)
   } finally { loadingSkus.value = false }
+}
+
+async function loadBeisiStock() {
+  loadingStock.value = true
+  try {
+    const res = await productsApi.getBeisiStock()
+    const map = new Map()
+    for (const [sku, info] of Object.entries(res.items || {})) {
+      map.set(sku, info.total_stock)
+    }
+    beisiStock.value = map
+  } catch (e) {
+    console.error('获取倍赛思库存失败', e)
+  } finally { loadingStock.value = false }
 }
 
 async function pushToStore() {
@@ -321,6 +360,6 @@ function handleImportError(error) {
   ElMessage.error(msg)
 }
 
-onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false; pushing.value = false })
-onMounted(() => { load(); refreshTargetSkus() })
+onBeforeUnmount(() => { loading.value = false; dialog.value = false; deleting.value = false; pushing.value = false; loadingStock.value = false })
+onMounted(() => { load(); refreshTargetSkus(); loadBeisiStock() })
 </script>
