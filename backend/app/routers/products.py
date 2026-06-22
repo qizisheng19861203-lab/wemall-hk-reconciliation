@@ -549,6 +549,7 @@ async def push_products_to_store(
                 source_sku_list = []
 
             sale_price = str(product.retail_price) if product.retail_price else "0.01"
+            cost_price = float(product.supply_price) if product.supply_price else None
 
             # 构建规格和SKU：必须使用目标店铺已有的specId/specValueId
             spec_info_list = []
@@ -604,17 +605,12 @@ async def push_products_to_store(
                     }]
 
                     sku_list = []
-                    seen_codes = set()
                     seen_spec_combos = set()
                     for idx, src_sku in enumerate(source_sku_list):
                         if src_sku.get("isDisabled"):
                             continue
-                        outer_code = src_sku.get("outerSkuCode", "") or ""
-                        # 多SKU不能共用同一个outerSkuCode，加后缀区分
-                        if outer_code in seen_codes:
-                            outer_code = f"{outer_code}-{idx+1}" if outer_code else ""
-                        if outer_code:
-                            seen_codes.add(outer_code)
+                        # 所有规格SKU统一使用商品编码（outerGoodsCode），不加后缀
+                        outer_code = product.sku or ""
                         sku_entry = {
                             "salePrice": sale_price,
                             "skuStockNum": src_sku.get("skuStockNum", 0),
@@ -622,6 +618,8 @@ async def push_products_to_store(
                             "skuPreStockNum": 0,
                             "skuSpecValueList": [],
                         }
+                        if cost_price is not None:
+                            sku_entry["costPrice"] = cost_price
                         for sv in src_sku.get("skuSpecValueList", []):
                             key = (sv.get("specId"), sv.get("specValueId"))
                             matched = src_to_target.get(key)
@@ -637,10 +635,16 @@ async def push_products_to_store(
                                 seen_spec_combos.add(combo_key)
                                 sku_list.append(sku_entry)
 
+                    def _single_sku(stock):
+                        entry = {"salePrice": sale_price, "skuStockNum": stock, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
+                        if cost_price is not None:
+                            entry["costPrice"] = cost_price
+                        return entry
+
                     if not sku_list:
                         # 匹配失败，降级为单SKU
                         stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
-                        sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
+                        sku_list = [_single_sku(stock_num)]
                         is_multi_sku = False
                         spec_info_list = []
                     else:
@@ -651,11 +655,17 @@ async def push_products_to_store(
                 else:
                     # 没有可用的目标规格值，降级为单SKU
                     stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
-                    sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
+                    single = {"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
+                    if cost_price is not None:
+                        single["costPrice"] = cost_price
+                    sku_list = [single]
                     is_multi_sku = False
             else:
                 stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
-                sku_list = [{"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}]
+                single = {"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
+                if cost_price is not None:
+                    single["costPrice"] = cost_price
+                sku_list = [single]
 
             create_payload = {
                 "basicInfo": {"vid": target_vid},
