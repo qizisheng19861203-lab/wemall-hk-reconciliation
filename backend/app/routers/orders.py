@@ -6,7 +6,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.order import Order, OrderItem, ShippingStatus
 from app.models.user import User
-from app.core.deps import get_current_user, require_admin_or_operator
+from app.core.deps import get_current_user, require_admin_or_operator, require_admin
 from app.schemas.order import OrderResponse, OrderUpdate, OrderFilter
 from app.services.wemall_api import WemallAPI
 
@@ -125,6 +125,22 @@ def get_order_stats(
         # 在结算单中但未确认收款
         "pending_settlement_rmb": float(total_supply - unsettled - confirmed_settled),
     }
+
+
+@router.post("/bulk-mark-test")
+def bulk_mark_test(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """把当前激活店铺所有未结算订单标记为测试订单（不计入结算）"""
+    store_filter = _active_store_filter(db)
+    count = (
+        db.query(Order)
+        .filter(store_filter, Order.settlement_id == None)
+        .update({"is_test": True}, synchronize_session=False)
+    )
+    db.commit()
+    return {"updated": count}
 
 
 @router.get("/{order_id}", response_model=OrderResponse)

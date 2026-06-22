@@ -121,6 +121,7 @@
             <el-option label="最近90天" :value="90" />
           </el-select>
           <el-button @click="syncOrders" :loading="syncing">同步微盟订单</el-button>
+          <el-button type="warning" @click="bulkMarkTest" :loading="markingTest">全部标为测试</el-button>
         </div>
       </div>
     </el-card>
@@ -268,7 +269,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { orders as ordersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -276,6 +277,7 @@ const auth = useAuthStore()
 const orders = ref([])
 const loading = ref(false)
 const syncing = ref(false)
+const markingTest = ref(false)
 const syncDays = ref(7)
 const saving = ref(false)
 const page = ref(1)
@@ -305,7 +307,7 @@ const filter = reactive({
   shipping_status: null,
   is_refunded: null,
   unsettled_only: false,
-  supply_only: false,   // 只看有我方供货商品的订单
+  supply_only: true,    // 只看有我方供货商品的订单（默认开启）
   keyword: '',
 })
 
@@ -399,14 +401,14 @@ const flatRows = computed(() => {
   for (const order of orders.value) {
     const items = order.items?.length ? order.items : [{ product_name: '(无商品)', quantity: 0, supply_price: null, supply_subtotal: null, product_id: null, id: 0 }]
 
-    // 「只看我方供货」过滤：跳过所有条目都是非供货（product_id=null 且无 supply_price）的订单
-    if (filter.supply_only) {
-      const hasSupplyItem = items.some(it => it.supply_price != null || it.product_id != null)
-      if (!hasSupplyItem) continue
-    }
+    // 「只看我方供货」过滤：过滤非供货条目，整单无供货时跳过
+    const displayItems = filter.supply_only
+      ? items.filter(it => it.supply_price != null || it.product_id != null)
+      : items
+    if (displayItems.length === 0) continue
 
-    items.forEach((item, idx) => {
-      rows.push({ ...order, _item: item, _itemIndex: idx, _itemCount: items.length })
+    displayItems.forEach((item, idx) => {
+      rows.push({ ...order, _item: item, _itemIndex: idx, _itemCount: displayItems.length })
     })
   }
   return rows
@@ -539,6 +541,28 @@ async function saveEdit() {
     ElMessage.error(e.message)
   } finally {
     saving.value = false
+  }
+}
+
+async function bulkMarkTest() {
+  try {
+    await ElMessageBox.confirm('将当前店铺所有未结算订单全部标为「测试」，不计入结算统计。确定继续？', '批量标记测试', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch { return }
+  markingTest.value = true
+  try {
+    const res = await ordersApi.bulkMarkTest()
+    ElMessage.success(`已将 ${res.updated} 条订单标记为测试`)
+    loadOrders()
+    loadStats()
+    loadPeriodStats()
+  } catch (e) {
+    ElMessage.error(e.message)
+  } finally {
+    markingTest.value = false
   }
 }
 

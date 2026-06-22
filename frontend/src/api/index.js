@@ -30,6 +30,7 @@ export const orders = {
   update: (id, data) => http.put(`/orders/${id}`, data),
   stats: (params) => http.get('/orders/stats', { params }),
   syncWemall: (params) => http.post('/orders/sync-wemall', null, { params }),
+  bulkMarkTest: () => http.post('/orders/bulk-mark-test'),
 }
 
 export const settlements = {
