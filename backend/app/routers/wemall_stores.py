@@ -35,6 +35,26 @@ def get_print_enabled(store: str, db: Session = Depends(get_db)):
     return {"store": store, "print_enabled": bool(config.print_enabled)}
 
 
+_PRINT_TOGGLE_SECRET = "bp_toggle_2026_wm"
+
+
+@public_router.post("/beisi-print-set")
+def set_beisi_print(action: str, secret: str, db: Session = Depends(get_db)):
+    """供快递打印助手调用：直接设置倍赛思打印开关为 on 或 off（带密钥，无需登录）"""
+    if secret != _PRINT_TOGGLE_SECRET:
+        raise HTTPException(status_code=403, detail="密钥错误")
+    if action not in ("on", "off"):
+        raise HTTPException(status_code=400, detail="action 必须是 on 或 off")
+    config = db.query(WemallStoreConfig).filter(
+        WemallStoreConfig.name.like("%倍赛思%")
+    ).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="店铺配置不存在")
+    config.print_enabled = (action == "on")
+    db.commit()
+    return {"ok": True, "print_enabled": bool(config.print_enabled), "action": action}
+
+
 # ─── Schemas ──────────────────────────────────────────────────────────────────
 
 class StoreCreate(BaseModel):
