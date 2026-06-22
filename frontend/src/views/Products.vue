@@ -297,10 +297,13 @@ async function save() {
     if (editingId.value) {
       const res = await productsApi.update(editingId.value, form)
       const backfilled = res?.backfilled_count ?? 0
-      if (backfilled > 0) {
-        ElMessage.success(`保存成功，已自动补录 ${backfilled} 条历史订单供货价`)
-      } else {
-        ElMessage.success('保存成功')
+      const parts = ['保存成功']
+      if (backfilled > 0) parts.push(`补录 ${backfilled} 条历史订单供货价`)
+      if (res?.cost_synced) parts.push(res.cost_sync_msg || '成本价已同步倍赛思')
+      ElMessage.success(parts.join('，'))
+      // 改了供货价但没推送（产品未同步 / 推送失败）→ 单独提示
+      if (res?.cost_sync_msg && !res.cost_synced) {
+        ElMessage.warning(res.cost_sync_msg)
       }
     } else {
       await productsApi.create(form)

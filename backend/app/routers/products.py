@@ -46,7 +46,7 @@ def create_product(payload: ProductCreate, db: Session = Depends(get_db), _: Use
 
 
 @router.put("/{product_id}")
-def update_product(
+async def update_product(
     product_id: int,
     payload: ProductUpdate,
     db: Session = Depends(get_db),
@@ -82,6 +82,17 @@ def update_product(
             db.commit()
         backfilled_count = len(items_to_backfill)
 
+    # 若改了供货价且产品已同步到倍赛思，自动把成本价(costPrice)也推过去
+    cost_synced = False
+    cost_sync_msg = ""
+    if new_supply_price is not None and product.sku:
+        try:
+            cost_synced, cost_sync_msg = await _push_cost_price_to_beisi(
+                db, product.sku, float(new_supply_price)
+            )
+        except Exception as e:
+            cost_sync_msg = f"成本价同步倍赛思失败：{str(e)}"
+
     # 返回产品信息 + 补录数量
     result = {
         "id": product.id,
@@ -94,6 +105,8 @@ def update_product(
         "image_url": product.image_url,
         "is_active": product.is_active,
         "backfilled_count": backfilled_count,
+        "cost_synced": cost_synced,
+        "cost_sync_msg": cost_sync_msg,
     }
     return result
 
@@ -280,6 +293,63 @@ def _get_wemall_target_api(db: Session) -> WemallAPI:
         client_secret=target.client_secret,
         shop_id=target.shop_id,
     )
+
+
+async def _push_cost_price_to_beisi(db: Session, sku: str, cost_price: float):
+    """把单个产品的成本价(costPrice)推到倍赛思甄选（若该 SKU 已同步）。
+    返回 (synced: bool, msg: str)。在在售(1)+下架(0)两种状态里按 outerGoodsCode 查找。"""
+    sku = str(sku or "").strip()
+    if not sku or cost_price is None:
+        return False, "无SKU或无供货价，未推送"
+
+    api = _get_wemall_target_api(db)
+    vid = await api._get_organization_vid()
+
+    target = None
+    for goods_status in (1, 0):  # 先在售再下架
+        page = 1
+        while True:
+            result = await api._request("goods/getList", {
+                "pageNum": page,
+                "pageSize": 20,
+                "queryParameter": {"goodsStatus": goods_status, "searchType": 1},
+                "basicInfo": {"vid": vid},
+            })
+            items = result.get("pageList", [])
+            if not items:
+                break
+            for it in items:
+                if str(it.get("outerGoodsCode", "") or "").strip() == sku:
+                    target = it
+                    break
+            if target:
+                break
+            total = result.get("totalCount", 0)
+            if page * 20 >= total:
+                break
+            page += 1
+        if target:
+            break
+
+    if not target:
+        return False, "该产品未同步到倍赛思，成本价未推送"
+
+    goods_id = target.get("goodsId")
+    detail = await api.get_product_detail(str(goods_id))
+    skus = detail.get("skuList", [])
+    sku_updates = [
+        {
+            "skuId": s["skuId"],
+            "salePrice": float(s.get("salePrice") or 0),
+            "costPrice": float(cost_price),
+        }
+        for s in skus
+    ]
+    if not sku_updates:
+        return False, "倍赛思该商品无SKU，未推送"
+
+    await api.update_goods_cost_price(goods_id, sku_updates)
+    return True, f"已同步成本价 {cost_price} 到倍赛思（{len(sku_updates)}个SKU）"
 
 
 @router.get("/target-store-skus")
