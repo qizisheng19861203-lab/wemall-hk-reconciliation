@@ -287,24 +287,32 @@ async def get_target_store_skus(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """获取倍赛思甄选店铺已有的所有商品 SKU 列表"""
+    """获取倍赛思甄选店铺已有的所有商品 SKU 列表（含在售+下架，goodsStatus=1和0）"""
     api = _get_wemall_target_api(db)
+    vid = await api._get_organization_vid()
     all_skus = set()
-    page = 1
     try:
-        while True:
-            result = await api.get_products(page=page, page_size=20)
-            products_data = result.get("pageList", [])
-            if not products_data:
-                break
-            for item in products_data:
-                sku = str(item.get("outerGoodsCode", "") or "").strip()
-                if sku:
-                    all_skus.add(sku)
-            total_count = result.get("totalCount", 0)
-            if page * 20 >= total_count:
-                break
-            page += 1
+        # goodsStatus=0 下架, goodsStatus=1 在售 — 两者都要计入"已同步"
+        for goods_status in [0, 1]:
+            page = 1
+            while True:
+                result = await api._request("goods/getList", {
+                    "pageNum": page,
+                    "pageSize": 20,
+                    "queryParameter": {"goodsStatus": goods_status, "searchType": 1},
+                    "basicInfo": {"vid": vid},
+                })
+                products_data = result.get("pageList", [])
+                if not products_data:
+                    break
+                for item in products_data:
+                    sku = str(item.get("outerGoodsCode", "") or "").strip()
+                    if sku:
+                        all_skus.add(sku)
+                total_count = result.get("totalCount", 0)
+                if page * 20 >= total_count:
+                    break
+                page += 1
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"查询倍赛思甄选商品失败: {str(e)}")
 
