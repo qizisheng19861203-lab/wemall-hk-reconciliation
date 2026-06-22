@@ -8,7 +8,10 @@ const routes = [
     component: () => import('@/views/Layout.vue'),
     meta: { requiresAuth: true },
     children: [
-      { path: '', redirect: '/dashboard' },
+      { path: '', redirect: () => {
+      const user = JSON.parse(localStorage.getItem('user') || 'null')
+      return user?.role === 'distributor' ? '/orders' : '/dashboard'
+    }},
       { path: 'dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'orders', component: () => import('@/views/Orders.vue') },
       { path: 'products', component: () => import('@/views/Products.vue'), meta: { adminOnly: true } },
@@ -33,9 +36,12 @@ router.beforeEach((to) => {
   const user = JSON.parse(localStorage.getItem('user') || 'null')
   const isLoggedIn = !!token
   const isAdmin = user?.role === 'admin'
+  const isDistributor = user?.role === 'distributor'
   if (to.meta.requiresAuth && !isLoggedIn) return '/login'
-  if (to.meta.adminOnly && !isAdmin) return '/dashboard'
-  if (to.path === '/login' && isLoggedIn) return '/dashboard'
+  if (to.meta.adminOnly && !isAdmin) return isDistributor ? '/orders' : '/dashboard'
+  // 分销商只能访问 /orders 和 /settlements
+  if (isDistributor && !['/orders', '/settlements'].includes(to.path)) return '/orders'
+  if (to.path === '/login' && isLoggedIn) return isDistributor ? '/orders' : '/dashboard'
 
   // 导航前立即清理 body 上的残留遮罩，防止切换时遮罩仍在拦截点击
   cleanupOverlays()

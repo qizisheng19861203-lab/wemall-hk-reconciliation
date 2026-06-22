@@ -21,6 +21,7 @@ export const products = {
   getTargetStoreConfig: () => http.get('/products/target-store-config'),
   getTargetStoreSkus: () => http.get('/products/target-store-skus'),
   getBeisiStock: () => http.get('/products/beisi-stock'),
+  syncCostPrice: () => http.post('/products/sync-cost-price'),
   pushToStore: (data) => http.post('/products/push-to-store', data),
 }
 

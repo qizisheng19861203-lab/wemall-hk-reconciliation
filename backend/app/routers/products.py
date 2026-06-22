@@ -346,6 +346,69 @@ async def get_beisi_stock(
     return {"items": stock_map, "zero_stock": zero_skus, "count": len(stock_map)}
 
 
+@router.post("/sync-cost-price")
+async def sync_cost_price_to_beisi(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """把我们产品库的供货价同步到倍赛思甄选店铺的商品成本价（costPrice）"""
+    from app.models.product import Product
+
+    # 1. 构建 DB 供货价映射：sku -> supply_price
+    db_products = db.query(Product).filter(Product.supply_price != None, Product.sku != None).all()
+    sku_to_price: dict = {p.sku: float(p.supply_price) for p in db_products if p.sku}
+    if not sku_to_price:
+        return {"updated_skus": 0, "skipped_products": 0, "errors": ["产品库无供货价数据"]}
+
+    api = _get_wemall_target_api(db)
+    try:
+        all_items = await api.get_all_on_sale_products()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"获取倍赛思甄选商品列表失败: {str(e)}")
+
+    updated_skus = 0
+    skipped_products = 0
+    errors = []
+
+    for item in all_items:
+        outer_code = str(item.get("outerGoodsCode", "") or "").strip()
+        goods_id = item.get("goodsId")
+        if not goods_id:
+            continue
+        # 快速检查：该商品（或其变体）是否有匹配的供货价
+        base_match = outer_code in sku_to_price
+        if not base_match:
+            skipped_products += 1
+            continue
+
+        try:
+            detail = await api.get_product_detail(str(goods_id))
+            skus = detail.get("skuList", [])
+            sku_updates = []
+            for sku in skus:
+                outer_sku = str(sku.get("outerSkuCode", "") or "").strip()
+                # 精确匹配，或去掉 -2/-3 后缀后匹配（多规格产品）
+                cost = sku_to_price.get(outer_sku)
+                if cost is None:
+                    base = outer_sku.rsplit("-", 1)[0] if "-" in outer_sku else outer_sku
+                    cost = sku_to_price.get(base)
+                if cost is not None:
+                    sku_updates.append({
+                        "skuId": sku["skuId"],
+                        "salePrice": float(sku.get("salePrice") or 0),
+                        "costPrice": cost,
+                    })
+            if sku_updates:
+                await api.update_goods_cost_price(goods_id, sku_updates)
+                updated_skus += len(sku_updates)
+            else:
+                skipped_products += 1
+        except Exception as e:
+            errors.append(f"goodsId={goods_id}: {str(e)}")
+
+    return {"updated_skus": updated_skus, "skipped_products": skipped_products, "errors": errors}
+
+
 @router.get("/target-store-config")
 async def get_target_store_config(
     db: Session = Depends(get_db),

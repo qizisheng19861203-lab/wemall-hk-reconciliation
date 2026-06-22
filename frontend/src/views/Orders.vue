@@ -176,6 +176,7 @@
           <template #default="{ row }">
             <span v-if="row._item.supply_subtotal" :class="{ 'text-red': row.is_refunded }">
               ¥{{ Number(row._item.supply_subtotal).toFixed(2) }}
+              <span v-if="row.is_refunded" style="font-size:11px;margin-left:2px">退款</span>
             </span>
             <span v-else style="color:#C0C4CC">-</span>
           </template>

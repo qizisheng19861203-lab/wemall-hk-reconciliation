@@ -20,6 +20,7 @@
         <el-button type="warning" @click="pushToStore" :disabled="!selectedProducts.length" :loading="pushing">
           同步到倍赛思甄选 ({{ selectedProducts.length }})
         </el-button>
+        <el-button type="info" @click="syncCostPrice" :loading="syncingCost">同步供货价→成本价</el-button>
       </div>
     </div>
 
@@ -143,6 +144,7 @@ const syncingRecent = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const pushing = ref(false)
+const syncingCost = ref(false)
 const dialog = ref(false)
 const editingId = ref(null)
 const keyword = ref('')
@@ -233,6 +235,28 @@ async function pushToStore() {
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || e.message)
   } finally { pushing.value = false }
+}
+
+async function syncCostPrice() {
+  try {
+    await ElMessageBox.confirm(
+      '将把产品库中所有已录供货价的产品，批量写入倍赛思甄选店铺的「成本价」字段。继续？',
+      '同步供货价→成本价',
+      { confirmButtonText: '同步', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  syncingCost.value = true
+  try {
+    const res = await productsApi.syncCostPrice()
+    const msg = `已更新 ${res.updated_skus} 个SKU成本价，跳过 ${res.skipped_products} 个无匹配商品`
+    if (res.errors?.length) {
+      ElMessageBox.alert(res.errors.join('\n'), `同步完成（有错误）`, { confirmButtonText: '知道了' })
+    } else {
+      ElMessage.success(msg)
+    }
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message)
+  } finally { syncingCost.value = false }
 }
 
 function onFilterChange() {

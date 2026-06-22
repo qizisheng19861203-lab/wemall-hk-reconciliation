@@ -252,3 +252,36 @@ class WemallAPI:
             },
         }
         return await self._request("goods/get", payload)
+
+    async def get_all_on_sale_products(self) -> list:
+        """分页拉取所有在售商品列表（goodsStatus=1）"""
+        vid = await self._get_organization_vid()
+        all_items = []
+        page = 1
+        while True:
+            result = await self._request("goods/getList", {
+                "pageNum": page,
+                "pageSize": 20,
+                "queryParameter": {"goodsStatus": 1, "searchType": 1},
+                "basicInfo": {"vid": vid},
+            })
+            items = result.get("pageList", [])
+            if not items:
+                break
+            all_items.extend(items)
+            total = result.get("totalCount", 0)
+            if page * 20 >= total:
+                break
+            page += 1
+        return all_items
+
+    async def update_goods_cost_price(self, goods_id: int, sku_updates: list) -> dict:
+        """更新商品成本价（goods/price/update）。
+        sku_updates: [{"skuId": N, "salePrice": x, "costPrice": y}, ...]
+        """
+        vid = await self._get_organization_vid()
+        return await self._request("goods/price/update", {
+            "goodsId": goods_id,
+            "basicInfo": {"vid": vid},
+            "skuList": sku_updates,
+        })

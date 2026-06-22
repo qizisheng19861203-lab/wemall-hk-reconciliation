@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => user.value?.role === 'admin')
   const isAdminOrOperator = computed(() => ['admin', 'operator'].includes(user.value?.role))
+  const isDistributor = computed(() => user.value?.role === 'distributor')
   // 所有登录用户（包括分销商）均可查看和下载PDF
   const canDownload = computed(() => !!token.value)
 
@@ -27,5 +28,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('user')
   }
 
-  return { user, token, isLoggedIn, isAdmin, isAdminOrOperator, canDownload, login, logout }
+  return { user, token, isLoggedIn, isAdmin, isAdminOrOperator, isDistributor, canDownload, login, logout }
 })
