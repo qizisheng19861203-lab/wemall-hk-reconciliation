@@ -9,7 +9,10 @@
 ## 访问地址
 - 生产环境：https://weimob.blue-medicine.com
 - 服务器IP：175.178.162.121
-- SSH：`ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121`
+- SSH：用别名 `ssh weiland-tencent`（已配 IdentitiesOnly）；或 `ssh -i ~/.ssh/tencent_wemall ubuntu@175.178.162.121`
+
+## ⛔ 铁律：SSH 经新加坡命脉机出网，禁止重连风暴
+Claude Code 一切出网走新加坡 `47.237.67.142`（同机 VPN + 交易 stevenqi.com + N8N，命脉）。连服务器**只用 `~/.ssh/config` 别名**（本项目 `weiland-tencent`），已配 `IdentitiesOnly yes`；SSH 失败就**停下排查**，**绝不** `until ssh; do sleep` 重连循环 / 并发 scp 轰炸——会把交易站打断（2026-06-22 已酿事故：VPN + stevenqi.com 一起中断）。两台机都没装 fail2ban，保命靠阿里云带外 VNC 控制台。
 
 ## 技术栈
 - 后端：Python 3.12 + FastAPI + SQLAlchemy + MySQL 8.0
