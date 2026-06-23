@@ -117,13 +117,19 @@ def _require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
+# 蔚蓝医药(id=1) 仅作产品母库（产品同步凭证），永久不作为对账店铺，对管理页隐藏
+MASTER_ONLY_STORE_ID = 1
+
+
 @router.get("", response_model=List[StoreOut])
 def list_stores(
     db: Session = Depends(get_db),
     _: User = Depends(_require_admin),
 ):
-    """列出所有店铺配置"""
-    stores = db.query(WemallStoreConfig).order_by(WemallStoreConfig.id).all()
+    """列出对账店铺配置（隐藏蔚蓝医药母库，永久只服务倍赛思甄选）"""
+    stores = db.query(WemallStoreConfig).filter(
+        WemallStoreConfig.id != MASTER_ONLY_STORE_ID
+    ).order_by(WemallStoreConfig.id).all()
     return [_to_out(s) for s in stores]
 
 
@@ -201,6 +207,8 @@ async def activate_store(
     _: User = Depends(_require_admin),
 ):
     """切换激活店铺，同时验证凭证是否有效"""
+    if store_id == MASTER_ONLY_STORE_ID:
+        raise HTTPException(status_code=400, detail="蔚蓝医药为产品母库，不作为对账店铺，不能激活")
     store = db.query(WemallStoreConfig).filter(WemallStoreConfig.id == store_id).first()
     if not store:
         raise HTTPException(status_code=404, detail="店铺配置不存在")
