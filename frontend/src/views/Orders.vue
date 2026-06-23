@@ -148,12 +148,12 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="收货地址" min-width="230">
+        <el-table-column label="收货地址" width="155">
           <template #default="{ row }">
-            <span style="font-size:12.5px;color:#475569;line-height:1.45;white-space:normal;word-break:break-all">{{ row.shipping_address || '-' }}</span>
+            <span style="font-size:12px;color:#64748b;line-height:1.4;white-space:normal;word-break:break-all">{{ row.shipping_address || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="商品" min-width="200">
+        <el-table-column label="商品" min-width="300">
           <template #default="{ row }">
             <div style="display:flex;align-items:center;gap:6px">
               <el-image v-if="row._item.image_url" :src="row._item.image_url"
