@@ -8,8 +8,14 @@ from app.models.user import User, UserRole
 from app.core.deps import get_current_user, require_admin
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.services.wemall_api import WemallAPI
+from decimal import Decimal
 import pandas as pd
 import io
+
+
+def _subtotal(price, qty) -> Decimal:
+    """供货小计统一用 Decimal 计算，避免 float 精度误差"""
+    return (Decimal(str(price)) * int(qty)).quantize(Decimal("0.01"))
 
 router = APIRouter(prefix="/products", tags=["产品管理"])
 
@@ -77,7 +83,7 @@ async def update_product(
         )
         for item in items_to_backfill:
             item.supply_price = new_supply_price
-            item.supply_subtotal = float(new_supply_price) * item.quantity
+            item.supply_subtotal = _subtotal(new_supply_price, item.quantity)
         if items_to_backfill:
             db.commit()
         backfilled_count = len(items_to_backfill)
@@ -955,7 +961,7 @@ async def import_supply_price(
                 )
                 for item in items_to_backfill:
                     item.supply_price = supply_price
-                    item.supply_subtotal = supply_price * item.quantity
+                    item.supply_subtotal = _subtotal(supply_price, item.quantity)
             else:
                 not_found += 1
                 # 确保not_found_list里没有NaN值

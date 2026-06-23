@@ -86,6 +86,15 @@ def create_settlement(
     if not orders:
         raise HTTPException(status_code=400, detail="没有找到可结算的订单")
 
+    # 待录价拦截：有商品未录供货价的订单不能结算（否则会被静默按 0 计入，少收）
+    unpriced = [o.wemall_order_id for o in orders
+                if not o.is_refunded and any(it.supply_subtotal is None for it in o.items)]
+    if unpriced:
+        raise HTTPException(
+            status_code=400,
+            detail=f"以下订单有商品未录供货价，不能结算（共{len(unpriced)}单）：{', '.join(unpriced[:10])}{' 等' if len(unpriced) > 10 else ''}"
+        )
+
     total_supply = Decimal(0)
     total_refund = Decimal(0)
     for o in orders:
@@ -113,8 +122,14 @@ def create_settlement(
     db.add(settlement)
     db.flush()
 
-    for o in orders:
-        o.settlement_id = settlement.id
+    # 并发安全：条件更新 settlement_id IS NULL，被别的结算抢走则回滚（防双重计费 TOCTOU）
+    ids = [o.id for o in orders]
+    locked = db.query(Order).filter(
+        Order.id.in_(ids), Order.settlement_id == None
+    ).update({"settlement_id": settlement.id}, synchronize_session=False)
+    if locked != len(ids):
+        db.rollback()
+        raise HTTPException(status_code=409, detail="部分订单已被其他结算占用，请刷新后重试")
 
     db.commit()
     db.refresh(settlement)
@@ -489,6 +504,14 @@ def auto_settle_period(
     if not orders:
         return {"message": "该周期没有未结算订单", "period_start": ps_bj.isoformat(), "period_end": pe_bj.isoformat()}
 
+    # 排除有未录价商品的订单（不静默按0结算，留待录价后人工结算）
+    _skipped_unpriced = [o.wemall_order_id for o in orders
+                         if not o.is_refunded and any(it.supply_subtotal is None for it in o.items)]
+    orders = [o for o in orders
+              if o.is_refunded or all(it.supply_subtotal is not None for it in o.items)]
+    if not orders:
+        return {"message": f"该周期订单都含未录价商品，已跳过 {len(_skipped_unpriced)} 单未结算"}
+
     # 获取今日汇率
     today = now_beijing.date()
     rate_record = db.query(ExchangeRate).filter(ExchangeRate.date == today).first()
@@ -519,9 +542,14 @@ def auto_settle_period(
     db.add(settlement)
     db.flush()
 
-    # 关联订单
-    for o in orders:
-        o.settlement_id = settlement.id
+    # 并发安全：条件更新 settlement_id IS NULL，被抢走则回滚（防双重计费）
+    ids = [o.id for o in orders]
+    locked = db.query(Order).filter(
+        Order.id.in_(ids), Order.settlement_id == None
+    ).update({"settlement_id": settlement.id}, synchronize_session=False)
+    if locked != len(ids):
+        db.rollback()
+        raise HTTPException(status_code=409, detail="部分订单已被其他结算占用，请重试")
 
     db.commit()
     db.refresh(settlement)

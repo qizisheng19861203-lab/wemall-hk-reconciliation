@@ -103,8 +103,16 @@ async def sync_orders(
                 except Exception:
                     pass
 
+                # 售后/退款检测：rightsInfos 含已售后(rightsStatus=2)即视为退款，排除结算（保守口径，绝不多收）
+                has_refund = any(
+                    (r or {}).get("rightsStatus") == 2
+                    for r in (order_data.get("rightsInfos") or [])
+                )
+
                 if existing:
                     existing.shipping_status = shipping_status
+                    if has_refund and not existing.is_refunded:
+                        existing.is_refunded = True
                     if addr and not (existing.shipping_address or "").strip():
                         existing.shipping_address = addr
                     if phone and not (existing.buyer_phone or "").strip():
@@ -153,6 +161,7 @@ async def sync_orders(
                         buyer_phone=phone,
                         shipping_address=addr,
                         shipping_status=shipping_status,
+                        is_refunded=has_refund,
                         wemall_store_id=active_store_id,
                         raw_data=json.dumps(order_data, ensure_ascii=False),
                     )
