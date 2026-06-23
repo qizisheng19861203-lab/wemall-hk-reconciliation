@@ -133,26 +133,24 @@
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
       <el-table :data="flatRows" stripe :span-method="spanMethod" border size="small" style="font-size:13px">
-        <el-table-column prop="wemall_order_id" label="订单号" width="165">
+        <el-table-column label="订单号 / 下单时间" width="150">
           <template #default="{ row }">
-            <span>{{ row.wemall_order_id }}</span>
-            <el-tag v-if="row.is_test" type="info" size="small" style="margin-left:4px">测试</el-tag>
+            <div style="font-size:12px;line-height:1.35;color:#475569;font-variant-numeric:tabular-nums;word-break:break-all">{{ row.wemall_order_id }}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:1px">{{ fmtBJ(row.order_date) }}</div>
+            <el-tag v-if="row.is_test" type="info" size="small" style="margin-top:2px">测试</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="下单时间" width="130">
-          <template #default="{ row }"><span style="font-size:12px">{{ fmtBJ(row.order_date) }}</span></template>
-        </el-table-column>
-        <el-table-column label="收件人" width="130">
+        <el-table-column label="收件人" width="100">
           <template #default="{ row }">
             <div style="line-height:1.3">
-              <div>{{ row.buyer_name || '-' }}</div>
-              <div style="font-size:11px;color:#909399">{{ row.buyer_phone || '' }}</div>
+              <div style="font-size:13px;color:#1e293b">{{ row.buyer_name || '-' }}</div>
+              <div style="font-size:11px;color:#94a3b8">{{ row.buyer_phone || '' }}</div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="地址" width="160" show-overflow-tooltip>
+        <el-table-column label="收货地址" min-width="230">
           <template #default="{ row }">
-            <span style="font-size:12px;color:#606266">{{ row.shipping_address || '-' }}</span>
+            <span style="font-size:12.5px;color:#475569;line-height:1.45;white-space:normal;word-break:break-all">{{ row.shipping_address || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="商品" min-width="200">
@@ -166,48 +164,48 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="数量" width="55" align="center">
-          <template #default="{ row }">{{ row._item.quantity }}</template>
+        <el-table-column label="数量" width="48" align="center">
+          <template #default="{ row }"><span style="font-size:13px;color:#475569">{{ row._item.quantity }}</span></template>
         </el-table-column>
-        <el-table-column label="供货单价(RMB)" width="130" align="right">
+        <el-table-column label="供货单价" width="96" align="right">
           <template #default="{ row }">
-            <span v-if="row._item.supply_price" style="color:#409EFF">¥{{ Number(row._item.supply_price).toFixed(2) }}</span>
-            <!-- product_id=null → 产品不在我们供货目录 → 非供货（灰色）-->
-            <!-- product_id≠null 但无supply_price → 我们的产品，缺供货价 → 待录价（红色）-->
+            <span v-if="row._item.supply_price" style="font-size:12px;color:#94a3b8">¥{{ Number(row._item.supply_price).toFixed(2) }}</span>
+            <!-- product_id=null → 非供货（灰）；≠null 但无供货价 → 待录价（红）-->
             <el-tag v-else-if="row._item.product_id == null" type="info" size="small">非供货</el-tag>
             <el-tag v-else type="danger" size="small">待录价</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="供货小计(RMB)" width="130" align="right">
+        <el-table-column label="供货小计" width="128" align="right">
           <template #default="{ row }">
-            <span v-if="row._item.supply_subtotal" :class="{ 'text-red': row.is_refunded }">
-              ¥{{ Number(row._item.supply_subtotal).toFixed(2) }}
-              <span v-if="row.is_refunded" style="font-size:11px;margin-left:2px">退款</span>
+            <span v-if="row._item.supply_subtotal"
+              :style="{ fontSize:'15.5px', fontWeight:700, color: row.is_refunded ? '#ef4444' : '#1f6feb', fontVariantNumeric:'tabular-nums', textDecoration: row.is_refunded ? 'line-through' : 'none' }">
+              <span style="font-size:11px;font-weight:500;opacity:0.65">¥</span>{{ Number(row._item.supply_subtotal).toFixed(2) }}
             </span>
-            <span v-else style="color:#C0C4CC">-</span>
+            <span v-if="row.is_refunded && row._item.supply_subtotal" style="font-size:10px;color:#ef4444;margin-left:3px">退款</span>
+            <span v-else-if="!row._item.supply_subtotal" style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="客户支付(RMB)" width="130" align="right">
+        <el-table-column label="客户支付" width="96" align="right">
           <template #default="{ row }">
-            <span v-if="row._item.retail_price != null && Number(row._item.retail_price) > 0" style="color:#606266">
+            <span v-if="row._item.retail_price != null && Number(row._item.retail_price) > 0" style="font-size:12px;color:#94a3b8">
               ¥{{ (Number(row._item.retail_price) * row._item.quantity).toFixed(2) }}
             </span>
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="退款" width="90" align="center">
+        <el-table-column label="退款" width="72" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.is_refunded" type="danger" size="small">¥{{ row.refund_amount }}</el-tag>
+            <el-tag v-if="row.is_refunded" type="danger" size="small" effect="light">¥{{ row.refund_amount }}</el-tag>
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="结算" width="80" align="center">
+        <el-table-column label="结算" width="78" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.settlement_id" type="success" size="small">已结算</el-tag>
-            <el-tag v-else type="info" size="small">未结算</el-tag>
+            <el-tag v-if="row.settlement_id" type="success" size="small" effect="light" round>已结算</el-tag>
+            <el-tag v-else type="warning" size="small" effect="light" round>未结算</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" v-if="auth.isAdminOrOperator">
+        <el-table-column label="操作" width="58" align="center" v-if="auth.isAdminOrOperator">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
           </template>
@@ -434,9 +432,9 @@ const flatRows = computed(() => {
   return rows
 })
 
-// 列索引: 订单号[0] 日期[1] 收件人[2] 地址[3] 商品名[4] 数量[5] 供货单价[6] 供货小计[7] 客户支付[8] 退款[9] 结算[10] 操作[11]
-// 合并整订单行的列（跨商品条目合并）：订单号、日期、收件人、地址、退款、结算、操作
-const MERGE_COLS = [0, 1, 2, 3, 9, 10, 11]
+// 列索引(订单号与时间已合并为一列): 订单号/时间[0] 收件人[1] 地址[2] 商品[3] 数量[4] 供货单价[5] 供货小计[6] 客户支付[7] 退款[8] 结算[9] 操作[10]
+// 合并整订单行的列（跨商品条目合并）：订单号/时间、收件人、地址、退款、结算、操作
+const MERGE_COLS = [0, 1, 2, 8, 9, 10]
 function spanMethod({ rowIndex, columnIndex }) {
   if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
   const row = flatRows.value[rowIndex]
