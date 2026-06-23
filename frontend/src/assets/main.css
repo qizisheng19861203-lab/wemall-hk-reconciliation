@@ -25,3 +25,42 @@ body > .el-overlay.is-hidden,
 body > .el-overlay[style*="display: none"] {
   pointer-events: none !important;
 }
+
+/* ============================================================
+   全局精致化主题（保留蓝色基调，升级观感）— 2026-06-23
+   ============================================================ */
+:root { --el-border-radius-base: 8px; --el-border-radius-small: 6px; }
+
+body { color: #2b3445; }
+
+/* 卡片：更柔和的圆角 + 轻阴影；shadow=never 也给一层极淡阴影增加层次 */
+.el-card { border-radius: 12px !important; }
+.el-card.is-never-shadow { box-shadow: 0 1px 3px rgba(20, 40, 80, 0.05) !important; }
+.el-card__body { padding: 16px 18px; }
+
+/* 表格：精致表头 + 行悬停 + 等宽数字，金额对齐清晰 */
+.el-table { --el-table-row-hover-bg-color: #eef5ff; --el-table-border-color: #eef1f6; }
+.el-table th.el-table__cell { background: #f7f9fc !important; color: #59647a !important; font-weight: 600; }
+.el-table .el-table__cell { font-variant-numeric: tabular-nums; }
+.el-table .cell { line-height: 1.45; }
+
+/* 按钮 / 标签：圆润、不刺眼 */
+.el-button { border-radius: 8px; font-weight: 500; }
+.el-button--small { border-radius: 6px; }
+.el-tag { border-radius: 6px; font-weight: 500; }
+
+/* 输入 / 选择：统一圆角 */
+.el-input__wrapper, .el-select__wrapper, .el-textarea__inner { border-radius: 8px; }
+
+/* 侧栏菜单：选中态更明显（蓝色高亮条） */
+.el-menu-item.is-active { background: rgba(64, 158, 255, 0.16) !important; box-shadow: inset 3px 0 0 #409EFF; }
+
+/* 滚动条精致化 */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: #cbd5e3; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #aab6c7; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 弹窗：圆角更柔和 */
+.el-dialog { border-radius: 14px; }
+.el-dialog__header { font-weight: 600; }
