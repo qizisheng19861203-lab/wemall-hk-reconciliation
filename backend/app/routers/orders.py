@@ -22,7 +22,7 @@ def _active_store_filter(db: Session):
 
 
 def _build_query(db: Session, f: OrderFilter):
-    q = db.query(Order).options(joinedload(Order.items)).filter(_active_store_filter(db))
+    q = db.query(Order).options(joinedload(Order.items).joinedload(OrderItem.product)).filter(_active_store_filter(db))
     q = q.filter(Order.is_test == False)  # 测试订单不在订单管理列表显示
     if f.start_date:
         q = q.filter(Order.order_date >= f.start_date)

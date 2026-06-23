@@ -14,6 +14,7 @@ class OrderItemResponse(BaseModel):
     retail_price: Optional[Decimal]
     supply_price: Optional[Decimal]
     supply_subtotal: Optional[Decimal]
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True

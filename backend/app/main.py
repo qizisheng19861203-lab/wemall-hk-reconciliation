@@ -57,6 +57,11 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE products ADD COLUMN temp_stock_qty INT NULL COMMENT '临时库存数量'"))
         except Exception:
             pass  # column already exists
+        # raw_data 改 LONGTEXT：部分订单原始JSON超64KB(TEXT)导致同步INSERT失败、漏单
+        try:
+            conn.execute(text("ALTER TABLE orders MODIFY COLUMN raw_data LONGTEXT"))
+        except Exception:
+            pass
         conn.commit()
         # 旧结算单全部标记为店铺 1（我的店铺主店）
         conn.execute(text("UPDATE settlements SET wemall_store_id = 1 WHERE wemall_store_id IS NULL"))

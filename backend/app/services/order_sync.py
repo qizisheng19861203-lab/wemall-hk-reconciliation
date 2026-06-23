@@ -8,6 +8,23 @@ from app.services.wemall_api import WemallAPI
 import json
 
 
+def _extract_address(order_info: dict) -> str:
+    """从 orderFulfill.receiverInfo 拼收货地址"""
+    ri = ((order_info.get("orderFulfill") or {}).get("receiverInfo")) or {}
+    parts = []
+    for key in ("province", "city", "county", "area", "address"):
+        v = str(ri.get(key) or "").strip()
+        if v and v not in parts:
+            parts.append(v)
+    return "".join(parts)
+
+
+def _extract_phone(order_info: dict) -> str:
+    """手机号优先 buyerInfo.buyerExtInfo.buyerPhone"""
+    bi = order_info.get("buyerInfo") or {}
+    return str((bi.get("buyerExtInfo") or {}).get("buyerPhone") or bi.get("phone") or "")
+
+
 async def sync_orders(
     db: Session,
     start_date: Optional[datetime] = None,
@@ -57,20 +74,41 @@ async def sync_orders(
                 create_time = base_info.get("createTime")
                 order_date = datetime.fromtimestamp(create_time / 1000) if create_time else datetime.now()
 
+                order_status = base_info.get("orderStatus", 0)
+                # 已取消(9)：不新建；若已入库则标记退款，排除结算/统计
+                if order_status == 9:
+                    if existing and not existing.is_refunded:
+                        existing.is_refunded = True
+                        updated += 1
+                    else:
+                        skipped += 1
+                    continue
+                # 微盟 orderStatus: 3=待发货 4=部分发货 5=已发货 7=已收货 8=已完成（与快递云打印口径一致）
                 status_map = {
                     0: ShippingStatus.pending,
                     1: ShippingStatus.pending,
-                    2: ShippingStatus.shipped,
-                    3: ShippingStatus.delivered,
-                    4: ShippingStatus.returned,
+                    2: ShippingStatus.pending,
+                    3: ShippingStatus.pending,
+                    4: ShippingStatus.shipped,
+                    5: ShippingStatus.shipped,
+                    7: ShippingStatus.delivered,
+                    8: ShippingStatus.delivered,
                 }
-                order_status = base_info.get("orderStatus", 0)
                 shipping_status = status_map.get(order_status, ShippingStatus.pending)
+                addr = _extract_address(order_info)
+                phone = _extract_phone(order_info)
+                # 存 raw_data 前剥离身份证证件信息（隐私 + 体积，避免 raw_data 超长）
+                try:
+                    order_info.get("orderFulfill", {}).get("receiverInfo", {}).pop("certificateInfo", None)
+                except Exception:
+                    pass
 
                 if existing:
                     existing.shipping_status = shipping_status
-                    if shipping_status == ShippingStatus.returned:
-                        existing.is_refunded = True
+                    if addr and not (existing.shipping_address or "").strip():
+                        existing.shipping_address = addr
+                    if phone and not (existing.buyer_phone or "").strip():
+                        existing.buyer_phone = phone
                     # 补录：重新匹配 product_id 和 supply_price
                     if items_list and existing.items:
                         for ex_item in existing.items:
@@ -105,17 +143,12 @@ async def sync_orders(
                     updated += 1
                     continue
 
-                # 退款/退货订单不入库
-                if shipping_status == ShippingStatus.returned:
-                    skipped += 1
-                    continue
-
                 order = Order(
                     wemall_order_id=order_no,
                     order_date=order_date,
                     buyer_name=buyer_info.get("userNickName", ""),
-                    buyer_phone=buyer_info.get("phone", ""),
-                    shipping_address="",
+                    buyer_phone=phone,
+                    shipping_address=addr,
                     shipping_status=shipping_status,
                     wemall_store_id=active_store_id,
                     raw_data=json.dumps(order_data, ensure_ascii=False),

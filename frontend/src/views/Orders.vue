@@ -132,15 +132,15 @@
       <div v-if="loading" style="position:absolute;inset:0;z-index:10;background:rgba(255,255,255,0.65);display:flex;align-items:center;justify-content:center;border-radius:4px;">
         <el-icon class="is-loading" :size="28" color="#409EFF"><Loading /></el-icon>
       </div>
-      <el-table :data="flatRows" stripe :span-method="spanMethod" border style="font-size:14px">
+      <el-table :data="flatRows" stripe :span-method="spanMethod" border size="small" style="font-size:13px">
         <el-table-column prop="wemall_order_id" label="订单号" width="165">
           <template #default="{ row }">
             <span>{{ row.wemall_order_id }}</span>
             <el-tag v-if="row.is_test" type="info" size="small" style="margin-left:4px">测试</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="下单日期" width="100">
-          <template #default="{ row }">{{ row.order_date?.slice(0,10) }}</template>
+        <el-table-column label="下单时间" width="130">
+          <template #default="{ row }"><span style="font-size:12px">{{ fmtBJ(row.order_date) }}</span></template>
         </el-table-column>
         <el-table-column label="收件人" width="130">
           <template #default="{ row }">
@@ -155,9 +155,15 @@
             <span style="font-size:12px;color:#606266">{{ row.shipping_address || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="商品名称" min-width="120">
+        <el-table-column label="商品" min-width="200">
           <template #default="{ row }">
-            {{ row._item.product_name }}
+            <div style="display:flex;align-items:center;gap:6px">
+              <el-image v-if="row._item.image_url" :src="row._item.image_url"
+                :preview-src-list="[row._item.image_url]" preview-teleported fit="cover"
+                style="width:28px;height:28px;border-radius:4px;flex-shrink:0" />
+              <div v-else style="width:28px;height:28px;border-radius:4px;background:#f0f2f5;flex-shrink:0" />
+              <span style="font-size:12px;line-height:1.25">{{ row._item.product_name }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="数量" width="55" align="center">
@@ -275,6 +281,19 @@ import { orders as ordersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
+
+// order_date 是 UTC 朴素时间，转北京(Asia/Shanghai)显示「MM-DD HH:mm」
+function fmtBJ(s) {
+  if (!s) return '-'
+  const d = new Date(/[Z+]/.test(s) ? s : s + 'Z')
+  if (isNaN(d)) return String(s).slice(0, 16).replace('T', ' ')
+  const p = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce((a, x) => (a[x.type] = x.value, a), {})
+  return `${p.month}-${p.day} ${p.hour}:${p.minute}`
+}
+
 const orders = ref([])
 const loading = ref(false)
 const syncing = ref(false)
