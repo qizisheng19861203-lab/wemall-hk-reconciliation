@@ -179,7 +179,7 @@
     </el-card>
 
     <!-- 自定义结算 -->
-    <el-dialog v-model="createDialog" title="自定义结算单" width="500px" destroy-on-close>
+    <el-dialog v-model="createDialog" title="自定义结算单" width="500px" destroy-on-close :teleported="false">
       <el-alert type="info" :closable="false" style="margin-bottom:12px">
         选择日期范围，系统会自动计算该周期内的未结算订单并获取今日汇率
       </el-alert>

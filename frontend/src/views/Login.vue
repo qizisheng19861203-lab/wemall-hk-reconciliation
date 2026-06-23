@@ -39,7 +39,7 @@ const rules = {
 }
 
 async function handleLogin() {
-  await formRef.value.validate()
+  try { await formRef.value.validate() } catch { return }  // 校验未过直接返回，避免未处理异常卡顿
   loading.value = true
   try {
     await auth.login(form.username, form.password)
