@@ -49,7 +49,7 @@
         <el-table-column type="selection" width="45" v-if="auth.isAdmin" />
         <el-table-column label="图片" width="70">
           <template #default="{ row }">
-            <el-image :src="row.image_url" style="width:44px;height:44px;border-radius:4px" fit="cover">
+            <el-image :src="row.image_url" lazy style="width:44px;height:44px;border-radius:4px" fit="cover">
               <template #error><div style="width:44px;height:44px;background:#f5f5f5;border-radius:4px" /></template>
             </el-image>
           </template>

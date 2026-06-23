@@ -155,7 +155,7 @@
         <el-table-column label="商品" min-width="300">
           <template #default="{ row }">
             <div style="display:flex;align-items:center;gap:6px">
-              <el-image v-if="row._item.image_url" :src="row._item.image_url"
+              <el-image v-if="row._item.image_url" :src="row._item.image_url" lazy
                 :preview-src-list="[row._item.image_url]" preview-teleported fit="cover"
                 style="width:28px;height:28px;border-radius:4px;flex-shrink:0" />
               <div v-else style="width:28px;height:28px;border-radius:4px;background:#f0f2f5;flex-shrink:0" />
@@ -496,9 +496,8 @@ async function loadPeriodStats() {
 }
 
 async function refreshStats() {
-  await loadStats()
-  await loadOrders()
-  await loadPeriodStats()
+  // 并行加载，别串行等（原来串行 ~3 倍耗时）
+  await Promise.all([loadStats(), loadOrders(), loadPeriodStats()])
 }
 
 function doSearch() {
