@@ -51,6 +51,8 @@ router.beforeEach((to) => {
 // dialog 已改为 teleported=false，body 下只剩 ElMessageBox 及偶发残影
 function cleanupOverlays() {
   document.querySelectorAll('body > .el-overlay').forEach(el => el.remove())
+  // 卡住的 loading 遮罩（全屏式 或 挂到 body 的）会拦截所有点击 → 导航时一并清掉
+  document.querySelectorAll('.el-loading-mask.is-fullscreen, body > .el-loading-mask').forEach(el => el.remove())
   document.querySelectorAll('.el-select__popper, .el-picker__popper, .el-dropdown__popper').forEach(el => {
     if (el.parentNode === document.body) el.remove()
   })

@@ -451,6 +451,7 @@ def auto_settle_period(
         Order.order_date <= period_end,
         Order.settlement_id == None,
         Order.is_refunded == False,
+        Order.is_test == False,
     ).options(joinedload(Order.items)).all()
 
     if not orders:
