@@ -41,7 +41,7 @@ async def sync_orders(
     active_store_id = active_store.id if active_store else None
 
     api = WemallAPI()
-    created, updated, skipped = 0, 0, 0
+    created, updated, skipped, errors = 0, 0, 0, 0
 
     # 微盟订单查询时间跨度不能超过30天，按29天分段
     current_start = start_date
@@ -143,49 +143,57 @@ async def sync_orders(
                     updated += 1
                     continue
 
-                order = Order(
-                    wemall_order_id=order_no,
-                    order_date=order_date,
-                    buyer_name=buyer_info.get("userNickName", ""),
-                    buyer_phone=phone,
-                    shipping_address=addr,
-                    shipping_status=shipping_status,
-                    wemall_store_id=active_store_id,
-                    raw_data=json.dumps(order_data, ensure_ascii=False),
-                )
-                db.add(order)
-                db.flush()
-
-                for item_data in items_list:
-                    goods_id = str(item_data.get("goodsId", ""))
-                    sku_code = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
-
-                    # 匹配产品：优先用 SKU 编码匹配，再用 goodsId
-                    product = None
-                    if sku_code:
-                        product = db.query(Product).filter(Product.sku == sku_code).first()
-                    if not product and goods_id:
-                        product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
-
-                    qty = int(item_data.get("skuNum", 1))
-                    # 尝试多个价格字段名（微盟API字段名可能不同）
-                    _rp_raw = item_data.get("salePrice") or item_data.get("skuPrice") or item_data.get("goodsPrice") or 0
-                    retail_price = float(_rp_raw) if _rp_raw else None
-                    supply_price = product.supply_price if product else None
-                    supply_subtotal = (supply_price * qty) if supply_price else None
-
-                    item = OrderItem(
-                        order_id=order.id,
-                        product_id=product.id if product else None,
-                        product_name=item_data.get("goodsTitle", "未知商品"),
-                        sku=sku_code or str(item_data.get("skuId", "")),
-                        quantity=qty,
-                        retail_price=retail_price,
-                        supply_price=supply_price,
-                        supply_subtotal=supply_subtotal,
+                # 单订单隔离：保存点包住新建，单条出错只回滚自己，绝不拖垮整批
+                sp = db.begin_nested()
+                try:
+                    order = Order(
+                        wemall_order_id=order_no,
+                        order_date=order_date,
+                        buyer_name=buyer_info.get("userNickName", ""),
+                        buyer_phone=phone,
+                        shipping_address=addr,
+                        shipping_status=shipping_status,
+                        wemall_store_id=active_store_id,
+                        raw_data=json.dumps(order_data, ensure_ascii=False),
                     )
-                    db.add(item)
-                created += 1
+                    db.add(order)
+                    db.flush()
+
+                    for item_data in items_list:
+                        goods_id = str(item_data.get("goodsId", ""))
+                        sku_code = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
+
+                        # 匹配产品：优先用 SKU 编码匹配，再用 goodsId
+                        product = None
+                        if sku_code:
+                            product = db.query(Product).filter(Product.sku == sku_code).first()
+                        if not product and goods_id:
+                            product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+
+                        qty = int(item_data.get("skuNum", 1))
+                        # 尝试多个价格字段名（微盟API字段名可能不同）
+                        _rp_raw = item_data.get("salePrice") or item_data.get("skuPrice") or item_data.get("goodsPrice") or 0
+                        retail_price = float(_rp_raw) if _rp_raw else None
+                        supply_price = product.supply_price if product else None
+                        supply_subtotal = (supply_price * qty) if supply_price else None
+
+                        item = OrderItem(
+                            order_id=order.id,
+                            product_id=product.id if product else None,
+                            product_name=item_data.get("goodsTitle", "未知商品"),
+                            sku=sku_code or str(item_data.get("skuId", "")),
+                            quantity=qty,
+                            retail_price=retail_price,
+                            supply_price=supply_price,
+                            supply_subtotal=supply_subtotal,
+                        )
+                        db.add(item)
+                    sp.commit()
+                    created += 1
+                except Exception as _oe:
+                    sp.rollback()
+                    errors += 1
+                    print(f"[order_sync] 订单 {order_no} 入库失败(已跳过,不影响其他单): {_oe}")
 
             db.commit()
 
@@ -196,4 +204,4 @@ async def sync_orders(
 
         current_start = current_end + timedelta(seconds=1)
 
-    return {"created": created, "updated": updated, "skipped": skipped}
+    return {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
