@@ -120,21 +120,10 @@ async def sync_orders(
                     # 补录：重新匹配 product_id 和 supply_price
                     if items_list and existing.items:
                         for ex_item in existing.items:
-                            # 如果 product_id 为空，尝试重新匹配
+                            # product_id 为空时，直接按已存的 sku(UPC) 重匹配产品库（产品库后来补全了就能匹配上）
                             if ex_item.product_id is None:
                                 sku_code = str(ex_item.sku or "").strip()
-                                matched_product = None
-                                # 先按 goodsCode/skuCode 匹配
-                                for item_data in items_list:
-                                    if str(item_data.get("skuId", "")) == (ex_item.sku or ""):
-                                        gc = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
-                                        if gc:
-                                            matched_product = db.query(Product).filter(Product.sku == gc).first()
-                                        if not matched_product:
-                                            gid = str(item_data.get("goodsId", ""))
-                                            if gid:
-                                                matched_product = db.query(Product).filter(Product.wemall_product_id == gid).first()
-                                        break
+                                matched_product = db.query(Product).filter(Product.sku == sku_code).first() if sku_code else None
                                 if matched_product:
                                     ex_item.product_id = matched_product.id
                                     if matched_product.supply_price and not ex_item.supply_price:

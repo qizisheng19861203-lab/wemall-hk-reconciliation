@@ -159,71 +159,12 @@ async def sync_products_from_wemall(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """从微盟API同步产品（固定使用蔚蓝医药主店凭证，不随激活店铺切换）"""
-    api = _get_wemall_master_api(db)
-    created, updated = 0, 0
-
-    page = 1
-    max_pages = page_limit if page_limit else 1  # 默认只同步第1页
-
-    while page <= max_pages:
-        try:
-            result = await api.get_products(page=page, page_size=20)
-            products_data = result.get("pageList", [])
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"微盟API错误: {str(e)}")
-
-        if not products_data:
-            break
-
-        for item in products_data:
-            goods_id = str(item.get("goodsId"))
-            sku_code = str(item.get("outerGoodsCode", "") or "").strip()
-
-            # 提取价格（取最低售价）
-            price_info = item.get("goodsPrice", {})
-            retail_price = float(price_info.get("minSalePrice", 0)) if price_info.get("minSalePrice") else None
-
-            # 优先按产品编码（SKU）查找；找不到再按 wemall_product_id
-            existing = None
-            if sku_code:
-                existing = db.query(Product).filter(Product.sku == sku_code).first()
-            if not existing:
-                existing = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
-
-            if existing:
-                existing.name = item.get("title", existing.name)
-                existing.wemall_product_id = goods_id  # 顺便更新 wemall_product_id
-                if sku_code:
-                    existing.sku = sku_code
-                existing.image_url = item.get("defaultImageUrl", existing.image_url)
-                if retail_price:
-                    existing.retail_price = retail_price
-                updated += 1
-            else:
-                product = Product(
-                    wemall_product_id=goods_id,
-                    name=item.get("title", ""),
-                    sku=sku_code,
-                    image_url=item.get("defaultImageUrl"),
-                    retail_price=retail_price,
-                )
-                db.add(product)
-                created += 1
-
-        db.commit()
-
-        # 如果没有指定page_limit，只同步第1页就退出
-        if not page_limit:
-            break
-
-        # 检查是否还有下一页
-        total_count = result.get("totalCount", 0)
-        if page * 20 >= total_count:
-            break
-        page += 1
-
-    return {"created": created, "updated": updated, "total": created + updated}
+    """从蔚蓝医药母库全量同步产品（在售+下架、全部页）；固定用 id=1 凭证。"""
+    from app.services.product_sync import sync_master_products
+    try:
+        return await sync_master_products(db)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"微盟API错误: {str(e)}")
 
 
 @router.post("/sync-by-ids")

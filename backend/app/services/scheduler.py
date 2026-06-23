@@ -32,6 +32,19 @@ async def _daily_order_sync():
         db.close()
 
 
+async def _daily_product_sync():
+    """每天全量同步蔚蓝母库产品，保持产品库完整→订单条目正确匹配「我方供货」"""
+    from app.services.product_sync import sync_master_products
+    db = SessionLocal()
+    try:
+        result = await sync_master_products(db)
+        logger.info(f"Daily product sync: {result}")
+    except Exception as e:
+        logger.error(f"Product sync failed: {e}")
+    finally:
+        db.close()
+
+
 def _auto_settle():
     """自动结算任务（同步函数）"""
     from app.routers.settlements import auto_settle_period
@@ -56,6 +69,8 @@ def start_scheduler():
     scheduler.add_job(_daily_exchange_rate, CronTrigger(hour=9, minute=0), id="daily_rate")
     # 每10分钟同步一次订单
     scheduler.add_job(_daily_order_sync, CronTrigger(minute='*/10'), id="order_sync")
+    # 每天凌晨3点全量同步蔚蓝母库产品（保持产品库完整，防订单误判非供货）
+    scheduler.add_job(_daily_product_sync, CronTrigger(hour=3, minute=30), id="product_sync")
     # 每月16号凌晨0点0分0秒自动结算1-15号（北京时间）
     scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=0, minute=0, second=0), id="auto_settle_first_half")
     # 每月1号凌晨0点0分0秒自动结算上月16号-月底（北京时间）

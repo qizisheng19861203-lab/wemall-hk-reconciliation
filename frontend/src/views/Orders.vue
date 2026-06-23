@@ -121,7 +121,6 @@
             <el-option label="最近90天" :value="90" />
           </el-select>
           <el-button @click="syncOrders" :loading="syncing">同步微盟订单</el-button>
-          <el-button type="warning" @click="bulkMarkTest" :loading="markingTest">全部标为测试</el-button>
         </div>
       </div>
     </el-card>
