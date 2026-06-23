@@ -33,7 +33,7 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
     sf = _store_filter(db)
 
     # 未结清金额
-    unsettled_orders = db.query(Order).filter(sf, Order.settlement_id == None, Order.is_refunded == False)\
+    unsettled_orders = db.query(Order).filter(sf, Order.settlement_id == None, Order.is_refunded == False, Order.is_test == False)\
         .options(joinedload(Order.items)).all()
     unsettled_rmb = sum(
         sum(item.supply_subtotal or 0 for item in o.items)
@@ -46,6 +46,7 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         sf,
         func.date(Order.order_date) == today,
         Order.is_refunded == False,
+        Order.is_test == False,
     ).options(joinedload(Order.items)).all()
     today_supply = sum(sum(item.supply_subtotal or 0 for item in o.items) for o in today_orders)
 
@@ -55,13 +56,16 @@ def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_u
         extract("year", Order.order_date) == today.year,
         extract("month", Order.order_date) == today.month,
         Order.is_refunded == False,
+        Order.is_test == False,
     ).options(joinedload(Order.items)).all()
     month_supply = sum(sum(item.supply_subtotal or 0 for item in o.items) for o in month_orders)
 
-    # 待结算结算单数
-    pending_settlements = db.query(Settlement).filter(
-        Settlement.status != SettlementStatus.settled
-    ).count()
+    # 待结算结算单数（按激活店铺过滤）
+    _sid = _active_store_id(db)
+    _pq = db.query(Settlement).filter(Settlement.status != SettlementStatus.settled)
+    if _sid is not None:
+        _pq = _pq.filter(Settlement.wemall_store_id == _sid)
+    pending_settlements = _pq.count()
 
     return {
         "unsettled_rmb": float(unsettled_rmb),
@@ -93,6 +97,7 @@ def get_monthly_daily(
         extract("year", Order.order_date) == year,
         extract("month", Order.order_date) == month,
         Order.is_refunded == False,
+        Order.is_test == False,
     ).options(joinedload(Order.items)).all()
 
     # 按日期聚合
@@ -122,6 +127,7 @@ def get_monthly_report(
             sf,
             extract("year", Order.order_date) == year,
             extract("month", Order.order_date) == month,
+            Order.is_test == False,
         ).options(joinedload(Order.items)).all()
         supply = sum(
             sum(item.supply_subtotal or 0 for item in o.items)
@@ -130,7 +136,7 @@ def get_monthly_report(
         refund = sum(o.refund_amount or 0 for o in orders if o.is_refunded)
         result.append({
             "month": month,
-            "order_count": len(orders),
+            "order_count": sum(1 for o in orders if not o.is_refunded),
             "supply_rmb": float(supply),
             "refund_rmb": float(refund),
             "net_rmb": float(supply - refund),
@@ -152,6 +158,7 @@ def get_yearly_report(
         orders = db.query(Order).filter(
             sf,
             extract("year", Order.order_date) == year,
+            Order.is_test == False,
         ).options(joinedload(Order.items)).all()
         supply = sum(
             sum(item.supply_subtotal or 0 for item in o.items)
@@ -160,7 +167,7 @@ def get_yearly_report(
         refund = sum(o.refund_amount or 0 for o in orders if o.is_refunded)
         result.append({
             "year": int(year),
-            "order_count": len(orders),
+            "order_count": sum(1 for o in orders if not o.is_refunded),
             "supply_rmb": float(supply),
             "refund_rmb": float(refund),
             "net_rmb": float(supply - refund),

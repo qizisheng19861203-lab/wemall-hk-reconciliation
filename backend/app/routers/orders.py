@@ -147,7 +147,7 @@ def bulk_mark_test(
 
 @router.get("/{order_id}", response_model=OrderResponse)
 def get_order(order_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    order = db.query(Order).options(joinedload(Order.items)).filter(Order.id == order_id).first()
+    order = db.query(Order).options(joinedload(Order.items)).filter(Order.id == order_id, _active_store_filter(db)).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
     return order
@@ -160,7 +160,7 @@ def update_order(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin_or_operator),
 ):
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).filter(Order.id == order_id, _active_store_filter(db)).first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
     for k, v in payload.model_dump(exclude_none=True).items():

@@ -28,6 +28,15 @@ def _active_store_id(db: Session) -> Optional[int]:
     return store.id if store else None
 
 
+def _get_settlement_scoped(db: Session, settlement_id: int):
+    """按激活店铺取结算单——跨店铺取不到（防越权/串店）"""
+    sid = _active_store_id(db)
+    q = db.query(Settlement).filter(Settlement.id == settlement_id)
+    if sid is not None:
+        q = q.filter(Settlement.wemall_store_id == sid)
+    return q.first()
+
+
 def _make_invoice_number():
     now = datetime.now()
     suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
@@ -64,11 +73,15 @@ def create_settlement(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    orders = db.query(Order).filter(
+    sid = _active_store_id(db)
+    oq = db.query(Order).filter(
         Order.id.in_(payload.order_ids),
         Order.settlement_id == None,
         Order.is_test == False,
-    ).options(joinedload(Order.items)).all()
+    )
+    if sid is not None:
+        oq = oq.filter(Order.wemall_store_id == sid)  # 只结算本店订单，防跨店串单
+    orders = oq.options(joinedload(Order.items)).all()
 
     if not orders:
         raise HTTPException(status_code=400, detail="没有找到可结算的订单")
@@ -95,7 +108,7 @@ def create_settlement(
         hkd_rate=payload.hkd_rate,
         payment_amount_hkd=payment_hkd,
         notes=payload.notes,
-        wemall_store_id=_active_store_id(db),
+        wemall_store_id=sid,
     )
     db.add(settlement)
     db.flush()
@@ -115,7 +128,7 @@ def confirm_settlement(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
     if s.status == SettlementStatus.settled:
@@ -136,7 +149,7 @@ def delete_settlement(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
     if s.status == SettlementStatus.settled:
@@ -164,7 +177,7 @@ def batch_invoice_zip(
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for sid in id_list:
-            s = db.query(Settlement).filter(Settlement.id == sid).first()
+            s = _get_settlement_scoped(db, sid)
             if not s:
                 continue
             date_str = s.period_end.strftime("%Y%m%d")
@@ -192,7 +205,7 @@ def batch_detail_zip(
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for sid in id_list:
-            s = db.query(Settlement).filter(Settlement.id == sid).first()
+            s = _get_settlement_scoped(db, sid)
             if not s:
                 continue
             orders = db.query(Order).filter(Order.settlement_id == sid).all()
@@ -216,10 +229,14 @@ def year_invoice_zip(
     """下载指定年份所有结算单的 invoice PDF，打包为 ZIP"""
     import zipfile, io
     from app.services.pdf_generator import generate_invoice_pdf
-    settlements = db.query(Settlement).filter(
+    _sid = _active_store_id(db)
+    _yq = db.query(Settlement).filter(
         Settlement.period_end >= f"{year}-01-01",
         Settlement.period_end < f"{year + 1}-01-01",
-    ).all()
+    )
+    if _sid is not None:
+        _yq = _yq.filter(Settlement.wemall_store_id == _sid)
+    settlements = _yq.all()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for s in settlements:
@@ -244,10 +261,14 @@ def year_detail_zip(
     import zipfile, io
     from app.services.pdf_generator import generate_detail_pdf
     from app.models.order import Order
-    settlements = db.query(Settlement).filter(
+    _sid = _active_store_id(db)
+    _yq = db.query(Settlement).filter(
         Settlement.period_end >= f"{year}-01-01",
         Settlement.period_end < f"{year + 1}-01-01",
-    ).all()
+    )
+    if _sid is not None:
+        _yq = _yq.filter(Settlement.wemall_store_id == _sid)
+    settlements = _yq.all()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for s in settlements:
@@ -274,7 +295,7 @@ def send_settlement_email_route(
     from app.services.email_service import send_settlement_email
     from app.models.notification_contact import NotificationContact
 
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
 
@@ -310,7 +331,7 @@ def download_invoice(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
     pdf_bytes = generate_invoice_pdf(s)
@@ -327,7 +348,7 @@ def download_detail(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
     orders = db.query(Order).filter(Order.settlement_id == s.id).options(joinedload(Order.items)).all()
@@ -345,7 +366,7 @@ async def send_notification(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    s = db.query(Settlement).filter(Settlement.id == settlement_id).first()
+    s = _get_settlement_scoped(db, settlement_id)
     if not s:
         raise HTTPException(status_code=404, detail="结算单不存在")
     result = await send_settlement_notification(db, s)
@@ -428,34 +449,45 @@ def auto_settle_period(
             )
 
         if today.day == 16 or (force and today.day > 15):
-            # 16号凌晨或手动触发时，结算1-15号
-            period_start = datetime(today.year, today.month, 1, 0, 0, 0, tzinfo=beijing_tz)
-            period_end = datetime(today.year, today.month, 15, 23, 59, 59, tzinfo=beijing_tz)
+            # 16号或手动触发，结算1-15号（北京墙钟）
+            ps_bj = datetime(today.year, today.month, 1, 0, 0, 0)
+            pe_bj = datetime(today.year, today.month, 15, 23, 59, 59)
         elif today.day == 1 or (force and today.day <= 15):
-            # 1号凌晨或手动触发时，结算上月16号-月底
+            # 1号或手动触发，结算上月16号-月底
             last_month = today.month - 1 if today.month > 1 else 12
             last_year = today.year if today.month > 1 else today.year - 1
             from calendar import monthrange
             last_day = monthrange(last_year, last_month)[1]
-            period_start = datetime(last_year, last_month, 16, 0, 0, 0, tzinfo=beijing_tz)
-            period_end = datetime(last_year, last_month, last_day, 23, 59, 59, tzinfo=beijing_tz)
+            ps_bj = datetime(last_year, last_month, 16, 0, 0, 0)
+            pe_bj = datetime(last_year, last_month, last_day, 23, 59, 59)
         else:
             raise HTTPException(status_code=400, detail="无法确定结算周期")
     else:
-        period_start = datetime.fromisoformat(period_start).replace(tzinfo=beijing_tz)
-        period_end = datetime.fromisoformat(period_end).replace(tzinfo=beijing_tz)
+        ps_bj = datetime.fromisoformat(period_start)
+        pe_bj = datetime.fromisoformat(period_end)
+        # 只传日期(00:00:00)时把结束补到当天 23:59:59，避免漏掉最后一天
+        if (pe_bj.hour, pe_bj.minute, pe_bj.second) == (0, 0, 0):
+            pe_bj = pe_bj.replace(hour=23, minute=59, second=59)
 
-    # 查找该周期内的未结算订单
-    orders = db.query(Order).filter(
+    # order_date 存的是 UTC naive，故把北京墙钟 localize 后转 UTC naive 再比较（修周期归属时区错配）
+    period_start = beijing_tz.localize(ps_bj).astimezone(pytz.utc).replace(tzinfo=None)
+    period_end = beijing_tz.localize(pe_bj).astimezone(pytz.utc).replace(tzinfo=None)
+
+    # 查找该周期内的未结算订单（按激活店铺隔离，防跨店串单）
+    sid = _active_store_id(db)
+    oq = db.query(Order).filter(
         Order.order_date >= period_start,
         Order.order_date <= period_end,
         Order.settlement_id == None,
         Order.is_refunded == False,
         Order.is_test == False,
-    ).options(joinedload(Order.items)).all()
+    )
+    if sid is not None:
+        oq = oq.filter(Order.wemall_store_id == sid)
+    orders = oq.options(joinedload(Order.items)).all()
 
     if not orders:
-        return {"message": "该周期没有未结算订单", "period_start": period_start.isoformat(), "period_end": period_end.isoformat()}
+        return {"message": "该周期没有未结算订单", "period_start": ps_bj.isoformat(), "period_end": pe_bj.isoformat()}
 
     # 获取今日汇率
     today = now_beijing.date()
@@ -474,14 +506,15 @@ def auto_settle_period(
     # 创建结算单
     settlement = Settlement(
         invoice_number=_make_invoice_number(),
-        period_start=period_start.replace(tzinfo=None),
-        period_end=period_end.replace(tzinfo=None),
+        period_start=ps_bj,   # 存北京墙钟用于展示
+        period_end=pe_bj,
         total_supply_rmb=total_supply,
         total_refund_rmb=Decimal(0),
         net_supply_rmb=total_supply,
         hkd_rate=rate_record.hkd_to_cny,
         payment_amount_hkd=payment_hkd,
-        notes=f"自动结算 {period_start.strftime('%Y-%m-%d')} ~ {period_end.strftime('%Y-%m-%d')}",
+        notes=f"自动结算 {ps_bj.strftime('%Y-%m-%d')} ~ {pe_bj.strftime('%Y-%m-%d')}",
+        wemall_store_id=sid,
     )
     db.add(settlement)
     db.flush()
