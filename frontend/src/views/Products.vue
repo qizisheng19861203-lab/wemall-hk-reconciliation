@@ -87,6 +87,20 @@
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
+        <el-table-column label="临时库存" width="180" align="center" v-if="auth.isAdmin">
+          <template #default="{ row }">
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+              <el-switch v-model="row.temp_stock_enabled" size="small"
+                @change="(v) => toggleTempStock(row, v)" :loading="row._tempSaving" />
+              <template v-if="row.temp_stock_enabled">
+                <el-input-number v-model="row.temp_stock_qty" :min="0" :controls="false"
+                  size="small" style="width:62px" />
+                <el-button size="small" type="primary" link
+                  :loading="row._tempSaving" @click="applyTempStock(row)">应用</el-button>
+              </template>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="80" v-if="auth.isAdmin">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
@@ -206,6 +220,47 @@ async function loadBeisiStock() {
   } catch (e) {
     console.error('获取倍赛思库存失败', e)
   } finally { loadingStock.value = false }
+}
+
+// ── 临时库存：开=跳过自动同步并保持固定库存，关=恢复自动同步 ──
+async function toggleTempStock(row, val) {
+  if (val) {
+    if (row.temp_stock_qty == null) {
+      ElMessage.info('请填写要保持的库存数量，然后点「应用」')
+      return  // 等用户填数量再点「应用」提交
+    }
+    await submitTempStock(row, true, row.temp_stock_qty)
+  } else {
+    await submitTempStock(row, false, null)
+  }
+}
+
+async function applyTempStock(row) {
+  if (row.temp_stock_qty == null || row.temp_stock_qty < 0) {
+    return ElMessage.warning('请填写有效的库存数量（≥0）')
+  }
+  await submitTempStock(row, true, row.temp_stock_qty)
+}
+
+async function submitTempStock(row, enabled, qty) {
+  row._tempSaving = true
+  try {
+    const res = await productsApi.setTempStock(row.id, { enabled, qty })
+    row.temp_stock_enabled = res.temp_stock_enabled
+    row.temp_stock_qty = res.temp_stock_qty
+    if (enabled) {
+      if (res.pushed) ElMessage.success(res.msg || '临时库存已设置并推送倍赛思')
+      else ElMessage.warning(res.msg || '已保存，但未推送（产品可能未同步到倍赛思）')
+    } else {
+      ElMessage.success(res.msg || '已关闭临时库存，下次自动同步恢复真实库存')
+    }
+    loadBeisiStock()
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+    row.temp_stock_enabled = !enabled  // 失败回滚开关
+  } finally {
+    row._tempSaving = false
+  }
 }
 
 async function pushToStore() {

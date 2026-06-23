@@ -48,6 +48,15 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE wemall_store_configs ADD COLUMN print_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '上线打印开关'"))
         except Exception:
             pass  # column already exists
+        # 给 products 表加临时库存开关 + 数量
+        try:
+            conn.execute(text("ALTER TABLE products ADD COLUMN temp_stock_enabled TINYINT(1) NOT NULL DEFAULT 0 COMMENT '临时库存开关:开=跳过自动同步保持固定库存'"))
+        except Exception:
+            pass  # column already exists
+        try:
+            conn.execute(text("ALTER TABLE products ADD COLUMN temp_stock_qty INT NULL COMMENT '临时库存数量'"))
+        except Exception:
+            pass  # column already exists
         conn.commit()
         # 旧结算单全部标记为店铺 1（我的店铺主店）
         conn.execute(text("UPDATE settlements SET wemall_store_id = 1 WHERE wemall_store_id IS NULL"))

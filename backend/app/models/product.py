@@ -19,6 +19,8 @@ class Product(Base):
     unit = Column(String(20), default="件")
     notes = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    temp_stock_enabled = Column(Boolean, default=False, comment="临时库存开关：开=跳过自动同步并保持固定库存")
+    temp_stock_qty = Column(Integer, nullable=True, comment="临时库存数量（temp_stock_enabled开启时生效）")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

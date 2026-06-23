@@ -23,6 +23,7 @@ export const products = {
   getBeisiStock: () => http.get('/products/beisi-stock'),
   syncCostPrice: () => http.post('/products/sync-cost-price'),
   pushToStore: (data) => http.post('/products/push-to-store', data),
+  setTempStock: (id, data) => http.post(`/products/${id}/temp-stock`, data),
 }
 
 export const orders = {

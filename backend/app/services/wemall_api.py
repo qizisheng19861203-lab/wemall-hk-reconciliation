@@ -285,3 +285,13 @@ class WemallAPI:
             "basicInfo": {"vid": vid},
             "skuList": sku_updates,
         })
+
+    async def update_stock(self, goods_id: int, sku_stock_list: list) -> dict:
+        """更新商品库存（stock/update）。
+        sku_stock_list: [{"skuId": N, "stockNum": M}, ...]
+        """
+        vid = await self._get_organization_vid()
+        return await self._request("stock/update", {
+            "basicInfo": {"vid": vid},
+            "goodsList": [{"goodsId": goods_id, "skuList": sku_stock_list}],
+        })

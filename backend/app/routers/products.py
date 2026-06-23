@@ -352,6 +352,110 @@ async def _push_cost_price_to_beisi(db: Session, sku: str, cost_price: float):
     return True, f"已同步成本价 {cost_price} 到倍赛思（{len(sku_updates)}个SKU）"
 
 
+async def _push_temp_stock_to_beisi(db: Session, sku: str, qty: int):
+    """把单个产品的临时库存(qty)推到倍赛思甄选所有 SKU（stock/update）。
+    返回 (ok: bool, msg: str)。在在售(1)+下架(0)两种状态里按 outerGoodsCode 找。"""
+    sku = str(sku or "").strip()
+    if not sku or qty is None:
+        return False, "无SKU或无数量，未推送"
+
+    api = _get_wemall_target_api(db)
+    vid = await api._get_organization_vid()
+
+    target = None
+    for goods_status in (1, 0):
+        page = 1
+        while True:
+            result = await api._request("goods/getList", {
+                "pageNum": page,
+                "pageSize": 20,
+                "queryParameter": {"goodsStatus": goods_status, "searchType": 1},
+                "basicInfo": {"vid": vid},
+            })
+            items = result.get("pageList", [])
+            if not items:
+                break
+            for it in items:
+                if str(it.get("outerGoodsCode", "") or "").strip() == sku:
+                    target = it
+                    break
+            if target:
+                break
+            total = result.get("totalCount", 0)
+            if page * 20 >= total:
+                break
+            page += 1
+        if target:
+            break
+
+    if not target:
+        return False, "该产品未同步到倍赛思，库存未推送"
+
+    goods_id = target.get("goodsId")
+    detail = await api.get_product_detail(str(goods_id))
+    skus = detail.get("skuList", [])
+    sku_stock_list = [{"skuId": s["skuId"], "stockNum": int(qty)} for s in skus]
+    if not sku_stock_list:
+        return False, "倍赛思该商品无SKU，未推送"
+
+    await api.update_stock(goods_id, sku_stock_list)
+    return True, f"已把倍赛思库存设为 {qty}（{len(sku_stock_list)}个SKU）"
+
+
+@router.post("/{product_id}/temp-stock")
+async def set_temp_stock(
+    product_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """设置/关闭产品的临时库存。开启时立即把数量推到倍赛思并标记跳过自动同步。"""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="产品不存在")
+
+    enabled = bool(payload.get("enabled"))
+    qty = payload.get("qty")
+    if enabled:
+        if qty is None or int(qty) < 0:
+            raise HTTPException(status_code=400, detail="请填写有效的临时库存数量（≥0）")
+        qty = int(qty)
+        product.temp_stock_qty = qty
+    product.temp_stock_enabled = enabled
+    db.commit()
+    db.refresh(product)
+
+    pushed = False
+    msg = ""
+    if enabled and product.sku:
+        try:
+            pushed, msg = await _push_temp_stock_to_beisi(db, product.sku, qty)
+        except Exception as e:
+            msg = f"临时库存推送倍赛思失败：{str(e)}"
+    elif not enabled:
+        msg = "已关闭临时库存，下次自动同步将恢复真实库存"
+
+    return {
+        "id": product.id,
+        "temp_stock_enabled": product.temp_stock_enabled,
+        "temp_stock_qty": product.temp_stock_qty,
+        "pushed": pushed,
+        "msg": msg,
+    }
+
+
+@router.get("/temp-stock-overrides")
+def temp_stock_overrides(db: Session = Depends(get_db)):
+    """公开接口（无需登录）：供快递云打印的库存同步读取——哪些 SKU 设了临时库存需跳过自动同步。
+    返回 {"overrides": {sku: qty}}。"""
+    rows = (
+        db.query(Product)
+        .filter(Product.temp_stock_enabled == True, Product.sku != None)  # noqa: E712
+        .all()
+    )
+    return {"overrides": {p.sku: int(p.temp_stock_qty or 0) for p in rows if p.sku}}
+
+
 @router.get("/target-store-skus")
 async def get_target_store_skus(
     db: Session = Depends(get_db),
