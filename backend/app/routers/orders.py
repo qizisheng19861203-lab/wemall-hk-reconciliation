@@ -158,7 +158,7 @@ def update_order(
     order_id: int,
     payload: OrderUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin_or_operator),
+    _: User = Depends(require_admin),  # 编辑订单仅管理员（运营/对账人员不可改 is_test/退款等影响结算的字段）
 ):
     order = db.query(Order).filter(Order.id == order_id, _active_store_filter(db)).first()
     if not order:
@@ -175,7 +175,7 @@ async def sync_orders_from_wemall(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_operator),
+    current_user: User = Depends(require_admin),  # 同步微盟订单仅管理员
 ):
     """从微盟拉取订单并入库"""
     from app.services.order_sync import sync_orders

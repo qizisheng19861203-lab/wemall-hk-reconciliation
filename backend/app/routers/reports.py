@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.order import Order, OrderItem
 from app.models.settlement import Settlement, SettlementStatus
 from app.models.user import User
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_admin
 
 router = APIRouter(prefix="/reports", tags=["统计报表"])
 
@@ -28,7 +28,7 @@ def _store_filter(db: Session):
 
 
 @router.get("/dashboard")
-def get_dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_dashboard(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     from sqlalchemy.orm import joinedload
     sf = _store_filter(db)
 
@@ -81,7 +81,7 @@ def get_monthly_daily(
     year: Optional[int] = None,
     month: Optional[int] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     """返回指定月份每天的供货额（默认当月）"""
     from sqlalchemy.orm import joinedload
@@ -117,7 +117,7 @@ def get_monthly_daily(
 def get_monthly_report(
     year: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     from sqlalchemy.orm import joinedload
     sf = _store_filter(db)
@@ -147,7 +147,7 @@ def get_monthly_report(
 @router.get("/yearly")
 def get_yearly_report(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     from sqlalchemy.orm import joinedload
     sf = _store_filter(db)

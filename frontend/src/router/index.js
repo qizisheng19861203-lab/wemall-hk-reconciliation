@@ -37,11 +37,13 @@ router.beforeEach((to) => {
   const isLoggedIn = !!token
   const isAdmin = user?.role === 'admin'
   const isDistributor = user?.role === 'distributor'
+  // 运营(对账人员)与分销商一样，只能访问订单+结算（仅查看/下载，不做编辑同步等管理操作）
+  const isLimited = isDistributor || user?.role === 'operator'
   if (to.meta.requiresAuth && !isLoggedIn) return '/login'
-  if (to.meta.adminOnly && !isAdmin) return isDistributor ? '/orders' : '/dashboard'
-  // 分销商只能访问 /orders 和 /settlements
-  if (isDistributor && !['/orders', '/settlements'].includes(to.path)) return '/orders'
-  if (to.path === '/login' && isLoggedIn) return isDistributor ? '/orders' : '/dashboard'
+  if (to.meta.adminOnly && !isAdmin) return isLimited ? '/orders' : '/dashboard'
+  // 分销商/运营只能访问 /orders 和 /settlements
+  if (isLimited && !['/orders', '/settlements'].includes(to.path)) return '/orders'
+  if (to.path === '/login' && isLoggedIn) return isLimited ? '/orders' : '/dashboard'
 
   // 导航前立即清理 body 上的残留遮罩，防止切换时遮罩仍在拦截点击
   cleanupOverlays()

@@ -112,7 +112,7 @@
             <el-button @click="resetFilter">重置</el-button>
           </el-form-item>
         </el-form>
-        <div style="display:flex;gap:8px" v-if="auth.isAdminOrOperator">
+        <div style="display:flex;gap:8px" v-if="auth.isAdmin">
           <el-select v-model="syncDays" style="width:110px">
             <el-option label="最近7天" :value="7" />
             <el-option label="最近15天" :value="15" />
@@ -204,7 +204,7 @@
             <el-tag v-else type="warning" size="small" effect="light" round>未结算</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="58" align="center" v-if="auth.isAdminOrOperator">
+        <el-table-column label="操作" width="58" align="center" v-if="auth.isAdmin">
           <template #default="{ row }">
             <el-button size="small" link @click="openEdit(row)">编辑</el-button>
           </template>

@@ -304,7 +304,7 @@ def send_settlement_email_route(
     settlement_id: int,
     include_detail: bool = True,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),  # 发结算邮件仅管理员
 ):
     """发送结算账单邮件给所有启用邮箱的联系人"""
     from app.services.email_service import send_settlement_email
