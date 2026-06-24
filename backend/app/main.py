@@ -62,6 +62,15 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE orders MODIFY COLUMN raw_data LONGTEXT"))
         except Exception:
             pass
+        # 真金白银 / 储值抵扣字段
+        try:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN cash_paid DECIMAL(12,2) NULL COMMENT '真金白银:在线实付'"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN stored_value_paid DECIMAL(12,2) NULL COMMENT '储值抵扣:discountType=42'"))
+        except Exception:
+            pass
         conn.commit()
         # 旧结算单全部标记为店铺 1（我的店铺主店）
         conn.execute(text("UPDATE settlements SET wemall_store_id = 1 WHERE wemall_store_id IS NULL"))

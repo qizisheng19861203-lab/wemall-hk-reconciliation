@@ -28,11 +28,20 @@ export const products = {
 
 export const orders = {
   list: (params) => http.get('/orders', { params }),
+  count: (params) => http.get('/orders/count', { params }),
   get: (id) => http.get(`/orders/${id}`),
   update: (id, data) => http.put(`/orders/${id}`, data),
   stats: (params) => http.get('/orders/stats', { params }),
+  cashDaily: (params) => http.get('/orders/cash-daily', { params }),
   syncWemall: (params) => http.post('/orders/sync-wemall', null, { params }),
   bulkMarkTest: () => http.post('/orders/bulk-mark-test'),
+  exportUrl: (params) => {
+    const qs = new URLSearchParams()
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, v)
+    })
+    return `/api/orders/export?${qs.toString()}`
+  },
 }
 
 export const settlements = {

@@ -78,6 +78,47 @@
       </div>
     </el-card>
 
+    <!-- 真金白银（实际现金到账）统计 -->
+    <el-card shadow="never" style="margin-bottom:16px;background:#f0fdf4;border-color:#bbf7d0">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;color:#15803d;margin-bottom:4px">💰 真金白银到账（区间在线实付，不含储值）</div>
+            <div style="font-size:26px;font-weight:700;color:#067647">¥{{ cash.total_cash.toLocaleString() }}</div>
+          </div>
+          <div style="border-left:1px solid #bbf7d0;padding-left:24px">
+            <div style="font-size:13px;color:#b45309;margin-bottom:4px">储值抵扣（非新增现金）</div>
+            <div style="font-size:18px;font-weight:600;color:#b45309">¥{{ cash.total_stored_value.toLocaleString() }}</div>
+          </div>
+          <div v-if="cash.total_refund_cash > 0" style="border-left:1px solid #bbf7d0;padding-left:24px">
+            <div style="font-size:13px;color:#dc2626;margin-bottom:4px">退款单现金</div>
+            <div style="font-size:18px;font-weight:600;color:#dc2626">¥{{ cash.total_refund_cash.toLocaleString() }}</div>
+          </div>
+        </div>
+        <el-button size="small" @click="showCashDetail = !showCashDetail" :loading="cashLoading">
+          {{ showCashDetail ? '收起每日明细' : '查看每日明细' }}
+        </el-button>
+      </div>
+      <el-table v-if="showCashDetail" :data="cash.days" size="small" border style="margin-top:12px"
+        :default-sort="{ prop: 'date', order: 'descending' }">
+        <el-table-column prop="date" label="日期(北京)" width="130" />
+        <el-table-column label="真金白银" width="130" align="right">
+          <template #default="{ row }"><span style="font-weight:700;color:#067647">¥{{ row.cash.toLocaleString() }}</span></template>
+        </el-table-column>
+        <el-table-column label="储值抵扣" width="130" align="right">
+          <template #default="{ row }"><span style="color:#b45309">¥{{ row.stored_value.toLocaleString() }}</span></template>
+        </el-table-column>
+        <el-table-column prop="order_count" label="订单数" width="90" align="center" />
+        <el-table-column prop="full_sv_count" label="全储值单" width="90" align="center" />
+        <el-table-column label="退款单现金" align="right">
+          <template #default="{ row }">
+            <span v-if="row.refund_cash > 0" style="color:#dc2626">¥{{ row.refund_cash.toLocaleString() }}</span>
+            <span v-else style="color:#C0C4CC">-</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 筛选 -->
     <el-card shadow="never" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -110,6 +151,7 @@
           <el-form-item style="margin-bottom:0">
             <el-button type="primary" @click="doSearch">搜索</el-button>
             <el-button @click="resetFilter">重置</el-button>
+            <el-button type="success" plain @click="exportExcel" :loading="exporting">导出明细</el-button>
           </el-form-item>
         </el-form>
         <div style="display:flex;gap:8px" v-if="auth.isAdmin">
@@ -192,6 +234,18 @@
             <span v-else style="color:#C0C4CC">-</span>
           </template>
         </el-table-column>
+        <el-table-column label="真金白银 / 储值" width="120" align="right">
+          <template #default="{ row }">
+            <div style="line-height:1.35">
+              <div v-if="Number(row.cash_paid) > 0" style="font-size:13.5px;font-weight:700;color:#067647;font-variant-numeric:tabular-nums">
+                ¥{{ Number(row.cash_paid).toFixed(0) }}
+              </div>
+              <div v-else style="font-size:11px;color:#b45309">无现金</div>
+              <el-tag :type="payTagType(row)" size="small" effect="light" style="margin-top:2px">{{ payMethodLabel(row) }}</el-tag>
+              <div v-if="Number(row.stored_value_paid) > 0" style="font-size:10px;color:#b45309;margin-top:1px">储值¥{{ Number(row.stored_value_paid).toFixed(0) }}</div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="退款" width="72" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.is_refunded" type="danger" size="small" effect="light">¥{{ row.refund_amount }}</el-tag>
@@ -211,9 +265,10 @@
         </el-table-column>
       </el-table>
       </div><!-- end loading wrapper -->
-      <div style="margin-top:16px;text-align:right">
-        <el-pagination v-model:current-page="page" :page-size="pageSize"
-          :total="total" layout="total, prev, pager, next" @current-change="loadOrders" />
+      <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span style="font-size:12px;color:#94a3b8">共 {{ total }} 条 / {{ Math.max(1, Math.ceil(total / pageSize)) }} 页</span>
+        <el-pagination v-model:current-page="page" :page-size="pageSize" background
+          :total="total" layout="prev, pager, next, jumper" @current-change="loadOrders" />
       </div>
     </el-card>
 
@@ -294,6 +349,7 @@ function fmtBJ(s) {
 const orders = ref([])
 const loading = ref(false)
 const syncing = ref(false)
+const exporting = ref(false)
 const markingTest = ref(false)
 const syncDays = ref(7)
 const saving = ref(false)
@@ -308,6 +364,9 @@ const lastRefreshTime = ref(null)
 const quickMode = ref('month')
 
 const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0, total_refund_rmb: 0 })
+const cash = reactive({ days: [], total_cash: 0, total_stored_value: 0, total_refund_cash: 0, net_cash: 0 })
+const cashLoading = ref(false)
+const showCashDetail = ref(false)
 const periodStats = reactive({ loaded: false, total_supply_rmb: 0, confirmed_settled_rmb: 0, pending_settlement_rmb: 0, unsettled_rmb: 0, total_orders: 0 })
 
 const periodRangeLabel = computed(() => {
@@ -389,6 +448,7 @@ function setQuickRange(mode) {
   loadOrders()
   loadStats()
   loadPeriodStats()
+  loadCashDaily()
 }
 
 function onMonthPick(val) {
@@ -402,6 +462,7 @@ function onMonthPick(val) {
   loadOrders()
   loadStats()
   loadPeriodStats()
+  loadCashDaily()
 }
 
 function onDateRangeChange() {
@@ -411,6 +472,7 @@ function onDateRangeChange() {
   loadOrders()
   loadStats()
   loadPeriodStats()
+  loadCashDaily()
 }
 
 const flatRows = computed(() => {
@@ -431,9 +493,24 @@ const flatRows = computed(() => {
   return rows
 })
 
-// 列索引(订单号与时间已合并为一列): 订单号/时间[0] 收件人[1] 地址[2] 商品[3] 数量[4] 供货单价[5] 供货小计[6] 客户支付[7] 退款[8] 结算[9] 操作[10]
-// 合并整订单行的列（跨商品条目合并）：订单号/时间、收件人、地址、退款、结算、操作
-const MERGE_COLS = [0, 1, 2, 8, 9, 10]
+// 列索引: 订单号/时间[0] 收件人[1] 地址[2] 商品[3] 数量[4] 供货单价[5] 供货小计[6] 客户支付[7] 真金白银/储值[8] 退款[9] 结算[10] 操作[11]
+// 合并整订单行的列（跨商品条目合并）：订单号/时间、收件人、地址、真金白银、退款、结算、操作（真金白银是整单金额，必须合并避免重复）
+const MERGE_COLS = [0, 1, 2, 8, 9, 10, 11]
+
+function payMethodLabel(row) {
+  const c = Number(row.cash_paid) || 0
+  const s = Number(row.stored_value_paid) || 0
+  if (c > 0 && s > 0) return '混合'
+  if (s > 0) return '储值'
+  return '现金'
+}
+function payTagType(row) {
+  const c = Number(row.cash_paid) || 0
+  const s = Number(row.stored_value_paid) || 0
+  if (c > 0 && s > 0) return 'warning'
+  if (s > 0) return 'info'
+  return 'success'
+}
 function spanMethod({ rowIndex, columnIndex }) {
   if (!MERGE_COLS.includes(columnIndex)) return [1, 1]
   const row = flatRows.value[rowIndex]
@@ -441,24 +518,63 @@ function spanMethod({ rowIndex, columnIndex }) {
   return [0, 0]
 }
 
+// 构造当前筛选条件（不含分页），导出/计数复用
+function currentFilterParams() {
+  const p = {
+    shipping_status: filter.shipping_status || undefined,
+    is_refunded: filter.is_refunded ?? undefined,
+    unsettled_only: filter.unsettled_only || undefined,
+    keyword: filter.keyword || undefined,
+  }
+  if (filter.dateRange?.[0]) p.start_date = filter.dateRange[0]
+  if (filter.dateRange?.[1]) p.end_date = filter.dateRange[1]
+  return p
+}
+
 async function loadOrders() {
   loading.value = true
   try {
-    const params = {
-      skip: (page.value - 1) * pageSize,
-      limit: pageSize,
-      shipping_status: filter.shipping_status || undefined,
-      is_refunded: filter.is_refunded ?? undefined,
-      unsettled_only: filter.unsettled_only || undefined,
-      keyword: filter.keyword || undefined,
-    }
-    if (filter.dateRange?.[0]) params.start_date = filter.dateRange[0]
-    if (filter.dateRange?.[1]) params.end_date = filter.dateRange[1]
-    const res = await ordersApi.list(params)
+    const base = currentFilterParams()
+    const params = { ...base, skip: (page.value - 1) * pageSize, limit: pageSize }
+    // 并行取本页数据 + 真实总数（总数让分页显示准确页数，不再靠翻页才发现还有更多）
+    const [res, cnt] = await Promise.all([
+      ordersApi.list(params),
+      ordersApi.count(base).catch(() => null),
+    ])
     orders.value = res
-    total.value = res.length < pageSize ? (page.value - 1) * pageSize + res.length : page.value * pageSize + 1
+    if (cnt && typeof cnt.total === 'number') {
+      total.value = cnt.total
+    } else {
+      total.value = res.length < pageSize ? (page.value - 1) * pageSize + res.length : page.value * pageSize + 1
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function exportExcel() {
+  exporting.value = true
+  try {
+    const params = { ...currentFilterParams(), supply_only: filter.supply_only || undefined }
+    const url = ordersApi.exportUrl(params)
+    const token = localStorage.getItem('token')
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (!resp.ok) throw new Error(`导出失败 (${resp.status})`)
+    const blob = await resp.blob()
+    const objectUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objectUrl
+    const tag = filter.dateRange?.[0] ? filter.dateRange[0].slice(0, 10) : new Date().toISOString().slice(0, 10)
+    a.setAttribute('download', `订单明细_${tag}.xlsx`)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(objectUrl)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error(e.message || '导出失败')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -495,9 +611,28 @@ async function loadPeriodStats() {
   }
 }
 
+async function loadCashDaily() {
+  cashLoading.value = true
+  try {
+    const p = {}
+    if (filter.dateRange?.[0]) p.start_date = filter.dateRange[0]
+    if (filter.dateRange?.[1]) p.end_date = filter.dateRange[1]
+    const res = await ordersApi.cashDaily(p)
+    cash.days = res.days || []
+    cash.total_cash = res.total_cash ?? 0
+    cash.total_stored_value = res.total_stored_value ?? 0
+    cash.total_refund_cash = res.total_refund_cash ?? 0
+    cash.net_cash = res.net_cash ?? 0
+  } catch (e) {
+    /* 静默：不阻断主流程 */
+  } finally {
+    cashLoading.value = false
+  }
+}
+
 async function refreshStats() {
   // 并行加载，别串行等（原来串行 ~3 倍耗时）
-  await Promise.all([loadStats(), loadOrders(), loadPeriodStats()])
+  await Promise.all([loadStats(), loadOrders(), loadPeriodStats(), loadCashDaily()])
 }
 
 function doSearch() {
@@ -521,6 +656,7 @@ function resetFilter() {
   loadOrders()
   loadStats()
   loadPeriodStats()
+  loadCashDaily()
 }
 
 function openEdit(row) {
@@ -610,10 +746,12 @@ onMounted(() => {
   loadOrders()
   loadStats()
   loadPeriodStats()
+  loadCashDaily()
   autoRefreshTimer = setInterval(() => {
     loadStats()
     loadOrders()
     loadPeriodStats()
+    loadCashDaily()
   }, 10 * 60 * 1000)
 })
 

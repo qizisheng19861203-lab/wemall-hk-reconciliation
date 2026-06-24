@@ -25,6 +25,26 @@ def _extract_phone(order_info: dict) -> str:
     return str((bi.get("buyerExtInfo") or {}).get("buyerPhone") or bi.get("phone") or "")
 
 
+# 微盟 discountType=42 = 储值/余额抵扣（实测：payAmount=0 的订单必含大额 type42）
+STORED_VALUE_DISCOUNT_TYPE = 42
+
+
+def _extract_payment(order_info: dict):
+    """解析真金白银(在线实付) 与 储值抵扣金额。
+    - cash_paid    = payInfo.payAmount（已扣掉储值，即客户真实掏出的现金）
+    - stored_value = totalDiscounts 里 discountType=42 的合计（储值/余额支付）
+    返回 (cash_paid: float, stored_value: float)
+    """
+    pi = order_info.get("payInfo") or {}
+    cash = float(pi.get("payAmount") or 0)
+    sv = sum(
+        float(d.get("discountAmount") or 0)
+        for d in (order_info.get("totalDiscounts") or [])
+        if d.get("discountType") == STORED_VALUE_DISCOUNT_TYPE
+    )
+    return round(cash, 2), round(sv, 2)
+
+
 async def sync_orders(
     db: Session,
     start_date: Optional[datetime] = None,
@@ -97,6 +117,7 @@ async def sync_orders(
                 shipping_status = status_map.get(order_status, ShippingStatus.pending)
                 addr = _extract_address(order_info)
                 phone = _extract_phone(order_info)
+                cash_paid, stored_value_paid = _extract_payment(order_info)
                 # 存 raw_data 前剥离身份证证件信息（隐私 + 体积，避免 raw_data 超长）
                 try:
                     order_info.get("orderFulfill", {}).get("receiverInfo", {}).pop("certificateInfo", None)
@@ -111,6 +132,9 @@ async def sync_orders(
 
                 if existing:
                     existing.shipping_status = shipping_status
+                    # 支付金额每次同步刷新（真金白银 + 储值），老单回填
+                    existing.cash_paid = cash_paid
+                    existing.stored_value_paid = stored_value_paid
                     if has_refund and not existing.is_refunded:
                         existing.is_refunded = True
                     if addr and not (existing.shipping_address or "").strip():
@@ -152,6 +176,8 @@ async def sync_orders(
                         shipping_status=shipping_status,
                         is_refunded=has_refund,
                         wemall_store_id=active_store_id,
+                        cash_paid=cash_paid,
+                        stored_value_paid=stored_value_paid,
                         raw_data=json.dumps(order_data, ensure_ascii=False),
                     )
                     db.add(order)

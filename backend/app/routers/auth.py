@@ -59,12 +59,17 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(require_admin)):
 def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
+    # email 列有唯一索引：空字符串会和已有的空邮箱用户撞唯一约束(1062)，必须归一化为 NULL
+    email = (payload.email or "").strip() or None
+    phone = (payload.phone or "").strip() or None
+    if email and db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=400, detail="邮箱已被占用")
     user = User(
         username=payload.username,
         password_hash=get_password_hash(payload.password),
         display_name=payload.display_name,
-        email=payload.email,
-        phone=payload.phone,
+        email=email,
+        phone=phone,
         role=payload.role,
     )
     db.add(user)
@@ -78,7 +83,15 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    for k, v in payload.model_dump(exclude_none=True).items():
+    data = payload.model_dump(exclude_none=True)
+    # 空字符串的 email/phone 归一化为 NULL，避免唯一索引(email)撞空串
+    if "email" in data:
+        data["email"] = (data["email"] or "").strip() or None
+    if "phone" in data:
+        data["phone"] = (data["phone"] or "").strip() or None
+    if data.get("email") and db.query(User).filter(User.email == data["email"], User.id != user_id).first():
+        raise HTTPException(status_code=400, detail="邮箱已被占用")
+    for k, v in data.items():
         setattr(user, k, v)
     db.commit()
     db.refresh(user)

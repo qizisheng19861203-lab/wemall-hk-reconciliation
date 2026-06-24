@@ -30,6 +30,8 @@ class Order(Base):
     refund_reason = Column(Text, nullable=True)
     settlement_id = Column(Integer, ForeignKey("settlements.id"), nullable=True)
     wemall_store_id = Column(Integer, nullable=True, comment="来源微盟店铺ID（关联wemall_store_configs）")
+    cash_paid = Column(Numeric(12, 2), nullable=True, comment="真金白银：客户在线实付(payInfo.payAmount)，已扣储值")
+    stored_value_paid = Column(Numeric(12, 2), nullable=True, comment="储值抵扣：discountType=42 合计")
     notes = Column(Text, nullable=True)
     raw_data = Column(Text, nullable=True, comment="微盟原始数据JSON")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

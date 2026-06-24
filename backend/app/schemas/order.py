@@ -35,6 +35,8 @@ class OrderResponse(BaseModel):
     refund_date: Optional[datetime]
     refund_reason: Optional[str]
     settlement_id: Optional[int]
+    cash_paid: Optional[Decimal] = None
+    stored_value_paid: Optional[Decimal] = None
     notes: Optional[str]
     items: List[OrderItemResponse] = []
     created_at: datetime

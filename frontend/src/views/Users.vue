@@ -92,7 +92,7 @@ async function save() {
   if (!form.display_name) return ElMessage.warning('姓名不能为空')
   saving.value = true
   try {
-    if (editingId.value) await usersApi.update(editingId.value, { display_name: form.display_name, phone: form.phone, email: form.email })
+    if (editingId.value) await usersApi.update(editingId.value, { display_name: form.display_name, phone: form.phone, email: form.email, role: form.role })
     else await usersApi.create(form)
     ElMessage.success('保存成功')
     dialog.value = false

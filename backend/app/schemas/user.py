@@ -17,6 +17,7 @@ class UserUpdate(BaseModel):
     display_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    role: Optional[UserRole] = None
     is_active: Optional[bool] = None
 
 

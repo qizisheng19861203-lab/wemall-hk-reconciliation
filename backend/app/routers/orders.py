@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.order import Order, OrderItem, ShippingStatus
 from app.models.user import User
@@ -70,6 +71,145 @@ def list_orders(
     return _build_query(db, f).order_by(Order.order_date.desc()).offset(skip).limit(limit).all()
 
 
+@router.get("/count")
+def count_orders(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    shipping_status: Optional[ShippingStatus] = None,
+    is_refunded: Optional[bool] = None,
+    settlement_id: Optional[int] = None,
+    unsettled_only: bool = False,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """返回当前筛选条件下的订单总数（用于前端分页显示真实页数）"""
+    f = OrderFilter(
+        start_date=start_date, end_date=end_date,
+        shipping_status=shipping_status, is_refunded=is_refunded,
+        settlement_id=settlement_id, unsettled_only=unsettled_only,
+        keyword=keyword,
+    )
+    total = _build_query(db, f).order_by(None).count()
+    return {"total": total}
+
+
+_SHIP_LABEL = {"pending": "待发货", "shipped": "已发货", "delivered": "已签收", "returned": "已退货"}
+
+
+@router.get("/export")
+def export_orders(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    shipping_status: Optional[ShippingStatus] = None,
+    is_refunded: Optional[bool] = None,
+    settlement_id: Optional[int] = None,
+    unsettled_only: bool = False,
+    supply_only: bool = False,
+    keyword: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """按当前筛选条件导出订单明细 Excel（不分页，导全部）。每个商品一行。"""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+
+    f = OrderFilter(
+        start_date=start_date, end_date=end_date,
+        shipping_status=shipping_status, is_refunded=is_refunded,
+        settlement_id=settlement_id, unsettled_only=unsettled_only,
+        keyword=keyword,
+    )
+    orders = _build_query(db, f).order_by(Order.order_date.desc()).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "订单明细"
+    headers = [
+        "订单号", "下单时间(北京)", "收件人", "电话", "收货地址",
+        "商品名称", "数量", "供货单价", "供货小计", "客户支付",
+        "真金白银(整单)", "储值抵扣(整单)", "支付方式",
+        "发货状态", "退款金额", "结算状态",
+    ]
+    ws.append(headers)
+    hfill = PatternFill("solid", fgColor="1F6FEB")
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = hfill
+        c.alignment = Alignment(horizontal="center", vertical="center")
+
+    total_supply = 0.0
+    total_cash = 0.0
+    total_sv = 0.0
+    for o in orders:
+        if not o.is_refunded:
+            total_cash += float(o.cash_paid or 0)
+            total_sv += float(o.stored_value_paid or 0)
+        items = list(o.items or [])
+        if supply_only:
+            items = [it for it in items if (it.supply_price is not None or it.product_id is not None)]
+        if not items:
+            continue
+        bj = (o.order_date + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if o.order_date else ""
+        settle_label = "已结算" if o.settlement_id else "未结算"
+        ship_label = _SHIP_LABEL.get(getattr(o.shipping_status, "value", o.shipping_status), "")
+        cash = float(o.cash_paid or 0)
+        sv = float(o.stored_value_paid or 0)
+        if cash > 0 and sv > 0:
+            pay_method = "混合"
+        elif sv > 0:
+            pay_method = "储值"
+        else:
+            pay_method = "现金"
+        for idx, it in enumerate(items):
+            sub = float(it.supply_subtotal or 0)
+            if not o.is_refunded:
+                total_supply += sub
+            retail = (float(it.retail_price) * it.quantity) if it.retail_price else None
+            # 真金白银/储值是整单金额，只在该订单第一行显示，避免多商品行重复累计
+            first = idx == 0
+            ws.append([
+                o.wemall_order_id, bj, o.buyer_name or "", o.buyer_phone or "",
+                o.shipping_address or "", it.product_name or "", it.quantity,
+                float(it.supply_price) if it.supply_price else None,
+                sub if it.supply_subtotal else None,
+                round(retail, 2) if retail else None,
+                (cash if cash else None) if first else None,
+                (sv if sv else None) if first else None,
+                pay_method if first else "",
+                ship_label,
+                float(o.refund_amount) if o.is_refunded and o.refund_amount else None,
+                settle_label,
+            ])
+
+    # 合计行（col9=供货小计, col11=真金白银, col12=储值抵扣；均不含退款单）
+    ws.append([])
+    total_row = ["合计(不含退款)", "", "", "", "", "", "", "", round(total_supply, 2),
+                 "", round(total_cash, 2), round(total_sv, 2)]
+    ws.append(total_row)
+    last = ws.max_row
+    ws.cell(last, 1).font = Font(bold=True)
+    ws.cell(last, 9).font = Font(bold=True, color="D46B08")
+    ws.cell(last, 11).font = Font(bold=True, color="067647")
+    ws.cell(last, 12).font = Font(bold=True, color="B54708")
+
+    widths = [20, 17, 10, 14, 40, 36, 6, 10, 11, 11, 13, 13, 9, 10, 11, 10]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"orders-{(start_date or datetime.now()).strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
 @router.get("/stats")
 def get_order_stats(
     start_date: Optional[datetime] = None,
@@ -126,6 +266,55 @@ def get_order_stats(
         "confirmed_settled_rmb": float(confirmed_settled),
         # 在结算单中但未确认收款
         "pending_settlement_rmb": float(total_supply - unsettled - confirmed_settled),
+    }
+
+
+@router.get("/cash-daily")
+def cash_daily(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """每日真金白银(在线实付)统计。按北京日期分组，排除测试单。
+    cash=真金白银, stored_value=储值抵扣, full_sv_count=全储值单(现金为0)。
+    退款单的现金单独计入 refund_cash，不从 cash 里扣（cash=毛到账）。
+    """
+    from collections import defaultdict
+    q = db.query(Order).filter(_active_store_filter(db), Order.is_test == False)
+    if start_date:
+        q = q.filter(Order.order_date >= start_date)
+    if end_date:
+        q = q.filter(Order.order_date <= end_date)
+    orders = q.all()
+
+    day = defaultdict(lambda: {"cash": 0.0, "stored_value": 0.0, "order_count": 0,
+                               "full_sv_count": 0, "refund_cash": 0.0})
+    for o in orders:
+        bj = (o.order_date + timedelta(hours=8)).strftime("%Y-%m-%d") if o.order_date else "?"
+        cash = float(o.cash_paid or 0)
+        sv = float(o.stored_value_paid or 0)
+        d = day[bj]
+        d["order_count"] += 1
+        if o.is_refunded:
+            d["refund_cash"] += cash
+        else:
+            d["cash"] += cash
+            d["stored_value"] += sv
+            if cash == 0 and sv > 0:
+                d["full_sv_count"] += 1
+
+    days = [{"date": k, **{kk: (round(vv, 2) if isinstance(vv, float) else vv) for kk, vv in v.items()}}
+            for k, v in sorted(day.items())]
+    total_cash = round(sum(d["cash"] for d in days), 2)
+    total_sv = round(sum(d["stored_value"] for d in days), 2)
+    total_refund = round(sum(d["refund_cash"] for d in days), 2)
+    return {
+        "days": days,
+        "total_cash": total_cash,
+        "total_stored_value": total_sv,
+        "total_refund_cash": total_refund,
+        "net_cash": round(total_cash - total_refund, 2),
     }
 
 
