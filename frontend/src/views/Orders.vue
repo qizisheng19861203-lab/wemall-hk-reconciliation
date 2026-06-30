@@ -30,6 +30,40 @@
       </div>
     </el-card>
 
+    <!-- 今日统计（北京时区，常驻，不受上方区间选择影响） -->
+    <el-card shadow="never" style="margin-bottom:16px;background:#eff6ff;border-color:#bfdbfe">
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:15px">📅</span>
+            <span style="font-size:14px;font-weight:700;color:#1d4ed8">今日（{{ today.date }}）</span>
+          </div>
+          <span style="font-size:11px;color:#7c93b8">供货额=倍赛思该付我方(批发价)；真金白银=客户付倍赛思现金(零售价)，两者不同口径</span>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#3b82f6;margin-bottom:2px">今日订单数</div>
+          <div style="font-size:22px;font-weight:700;color:#1e40af">{{ today.order_count }}</div>
+        </div>
+        <div style="border-left:1px solid #bfdbfe;padding-left:24px">
+          <div style="font-size:12px;color:#3b82f6;margin-bottom:2px">今日供货额</div>
+          <div style="font-size:22px;font-weight:700;color:#1e40af">¥{{ today.supply_rmb.toFixed(2) }}</div>
+        </div>
+        <div style="border-left:1px solid #bfdbfe;padding-left:24px">
+          <div style="font-size:12px;color:#059669;margin-bottom:2px">今日真金白银 <span style="color:#6ee7b7">· 客户付倍赛思</span></div>
+          <div style="font-size:22px;font-weight:700;color:#047857">¥{{ today.cash_rmb.toLocaleString() }}</div>
+        </div>
+        <div v-if="today.stored_value_rmb > 0" style="border-left:1px solid #bfdbfe;padding-left:24px">
+          <div style="font-size:12px;color:#b45309;margin-bottom:2px">今日储值抵扣 <span style="color:#d6a566">· 客户付倍赛思</span></div>
+          <div style="font-size:18px;font-weight:600;color:#b45309">¥{{ today.stored_value_rmb.toLocaleString() }}</div>
+        </div>
+        <div v-if="today.refund_rmb > 0" style="border-left:1px solid #bfdbfe;padding-left:24px">
+          <div style="font-size:12px;color:#dc2626;margin-bottom:2px">今日退款</div>
+          <div style="font-size:18px;font-weight:600;color:#dc2626">¥{{ today.refund_rmb.toFixed(2) }}</div>
+        </div>
+        <el-button size="small" style="margin-left:auto" @click="loadToday" :loading="todayLoading">刷新今日</el-button>
+      </div>
+    </el-card>
+
     <!-- 快速结算区间选择 -->
     <el-card shadow="never" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -83,7 +117,7 @@
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
           <div>
-            <div style="font-size:13px;color:#15803d;margin-bottom:4px">💰 真金白银到账（区间在线实付，不含储值）</div>
+            <div style="font-size:13px;color:#15803d;margin-bottom:4px">💰 真金白银到账（客户付倍赛思·区间在线实付，不含储值）</div>
             <div style="font-size:26px;font-weight:700;color:#067647">¥{{ cash.total_cash.toLocaleString() }}</div>
           </div>
           <div style="border-left:1px solid #bbf7d0;padding-left:24px">
@@ -364,6 +398,8 @@ const lastRefreshTime = ref(null)
 const quickMode = ref('month')
 
 const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0, total_refund_rmb: 0 })
+const today = reactive({ date: '', order_count: 0, supply_rmb: 0, cash_rmb: 0, stored_value_rmb: 0, refund_rmb: 0 })
+const todayLoading = ref(false)
 const cash = reactive({ days: [], total_cash: 0, total_stored_value: 0, total_refund_cash: 0, net_cash: 0 })
 const cashLoading = ref(false)
 const showCashDetail = ref(false)
@@ -630,9 +666,26 @@ async function loadCashDaily() {
   }
 }
 
+async function loadToday() {
+  todayLoading.value = true
+  try {
+    const res = await ordersApi.today()
+    today.date = res.date ?? ''
+    today.order_count = res.order_count ?? 0
+    today.supply_rmb = res.supply_rmb ?? 0
+    today.cash_rmb = res.cash_rmb ?? 0
+    today.stored_value_rmb = res.stored_value_rmb ?? 0
+    today.refund_rmb = res.refund_rmb ?? 0
+  } catch (e) {
+    /* 静默：不阻断主流程 */
+  } finally {
+    todayLoading.value = false
+  }
+}
+
 async function refreshStats() {
   // 并行加载，别串行等（原来串行 ~3 倍耗时）
-  await Promise.all([loadStats(), loadOrders(), loadPeriodStats(), loadCashDaily()])
+  await Promise.all([loadStats(), loadOrders(), loadPeriodStats(), loadCashDaily(), loadToday()])
 }
 
 function doSearch() {
@@ -747,11 +800,13 @@ onMounted(() => {
   loadStats()
   loadPeriodStats()
   loadCashDaily()
+  loadToday()
   autoRefreshTimer = setInterval(() => {
     loadStats()
     loadOrders()
     loadPeriodStats()
     loadCashDaily()
+    loadToday()
   }, 10 * 60 * 1000)
 })
 

@@ -269,6 +269,42 @@ def get_order_stats(
     }
 
 
+@router.get("/today")
+def today_stats(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """今日统计（按北京时区，排除测试单）。
+    order_date 存的是 naive UTC，北京今日 00:00 = UTC 今日-8h，据此过滤避免漏掉北京 0-8 点的单。
+    返回今日：订单数 / 供货额 / 真金白银 / 储值抵扣 / 退款额。
+    """
+    from datetime import timezone
+    bj = timezone(timedelta(hours=8))
+    bj_now = datetime.now(bj)
+    bj_midnight = bj_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_utc = (bj_midnight - timedelta(hours=8)).replace(tzinfo=None)  # naive UTC
+
+    orders = (
+        db.query(Order)
+        .filter(_active_store_filter(db), Order.is_test == False, Order.order_date >= start_utc)
+        .options(joinedload(Order.items))
+        .all()
+    )
+    order_count = sum(1 for o in orders if not o.is_refunded)
+    supply = sum(
+        sum(item.supply_subtotal or 0 for item in o.items)
+        for o in orders if not o.is_refunded
+    )
+    cash = sum(float(o.cash_paid or 0) for o in orders if not o.is_refunded)
+    sv = sum(float(o.stored_value_paid or 0) for o in orders if not o.is_refunded)
+    refund = sum(float(o.refund_amount or 0) for o in orders if o.is_refunded)
+    return {
+        "date": bj_now.strftime("%Y-%m-%d"),
+        "order_count": order_count,
+        "supply_rmb": float(supply),
+        "cash_rmb": round(cash, 2),
+        "stored_value_rmb": round(sv, 2),
+        "refund_rmb": round(refund, 2),
+    }
+
+
 @router.get("/cash-daily")
 def cash_daily(
     start_date: Optional[datetime] = None,
