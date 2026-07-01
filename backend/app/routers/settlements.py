@@ -43,6 +43,26 @@ def _make_invoice_number():
     return f"INV{now.strftime('%Y%m%d')}{suffix}"
 
 
+def _order_has_our_unpriced(o) -> bool:
+    """订单是否含"我方产品但未录供货价"的商品（真·待录价，应拦截/跳过整单）。
+    ⚠️ 关键区分：非我方供货商品（倍赛思自营，product_id 为空）的 supply_subtotal 也是 None，
+    但那是"本就不该我们结的货"，按 0 处理即可，绝不能因为它把整单（含我方货款）一起跳过——
+    否则含自营品的混合单里，我方那部分货款会被漏结（2026-07-01 发现漏结7万的根因）。
+    """
+    return any(
+        (it.product_id is not None and it.supply_subtotal is None)
+        for it in (o.items or [])
+    )
+
+
+def _latest_rate(db: Session, today: date):
+    """取指定日(北京今日)汇率；没有则退回最近一条可用汇率（防凌晨自动结算早于9点汇率任务时硬失败）。"""
+    r = db.query(ExchangeRate).filter(ExchangeRate.date == today).first()
+    if not r:
+        r = db.query(ExchangeRate).order_by(ExchangeRate.date.desc()).first()
+    return r
+
+
 @router.get("", response_model=List[SettlementResponse])
 def list_settlements(
     status: Optional[SettlementStatus] = None,
@@ -86,9 +106,9 @@ def create_settlement(
     if not orders:
         raise HTTPException(status_code=400, detail="没有找到可结算的订单")
 
-    # 待录价拦截：有商品未录供货价的订单不能结算（否则会被静默按 0 计入，少收）
+    # 待录价拦截：只拦"我方产品未录供货价"的单（非我方供货的自营品按0处理，不拦整单，见 _order_has_our_unpriced）
     unpriced = [o.wemall_order_id for o in orders
-                if not o.is_refunded and any(it.supply_subtotal is None for it in o.items)]
+                if not o.is_refunded and _order_has_our_unpriced(o)]
     if unpriced:
         raise HTTPException(
             status_code=400,
@@ -504,19 +524,19 @@ def auto_settle_period(
     if not orders:
         return {"message": "该周期没有未结算订单", "period_start": ps_bj.isoformat(), "period_end": pe_bj.isoformat()}
 
-    # 排除有未录价商品的订单（不静默按0结算，留待录价后人工结算）
+    # 排除有"我方产品未录价"的订单（留待录价后人工结算）；非我方供货的自营品按0处理，不跳整单
     _skipped_unpriced = [o.wemall_order_id for o in orders
-                         if not o.is_refunded and any(it.supply_subtotal is None for it in o.items)]
+                         if not o.is_refunded and _order_has_our_unpriced(o)]
     orders = [o for o in orders
-              if o.is_refunded or all(it.supply_subtotal is not None for it in o.items)]
+              if o.is_refunded or not _order_has_our_unpriced(o)]
     if not orders:
         return {"message": f"该周期订单都含未录价商品，已跳过 {len(_skipped_unpriced)} 单未结算"}
 
-    # 获取今日汇率
+    # 获取汇率：优先今日，没有则退回最近一条可用汇率（防凌晨自动结算早于9点汇率任务时硬失败）
     today = now_beijing.date()
-    rate_record = db.query(ExchangeRate).filter(ExchangeRate.date == today).first()
+    rate_record = _latest_rate(db, today)
     if not rate_record:
-        raise HTTPException(status_code=400, detail="今日汇率未录入，无法自动结算")
+        raise HTTPException(status_code=400, detail="系统无任何汇率记录，无法结算")
 
     # 计算总金额
     total_supply = Decimal(0)

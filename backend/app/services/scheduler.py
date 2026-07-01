@@ -71,10 +71,12 @@ def start_scheduler():
     scheduler.add_job(_daily_order_sync, CronTrigger(minute='*/10'), id="order_sync")
     # 每天凌晨3点全量同步蔚蓝母库产品（保持产品库完整，防订单误判非供货）
     scheduler.add_job(_daily_product_sync, CronTrigger(hour=3, minute=30), id="product_sync")
-    # 每月16号凌晨0点0分0秒自动结算1-15号（北京时间）
-    scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=0, minute=0, second=0), id="auto_settle_first_half")
-    # 每月1号凌晨0点0分0秒自动结算上月16号-月底（北京时间）
-    scheduler.add_job(_auto_settle, CronTrigger(day=1, hour=0, minute=0, second=0), id="auto_settle_second_half")
+    # ⚠️ 自动结算必须晚于 9 点汇率任务：结算要用当日汇率，0 点跑时今日汇率还没抓到会失败(2026-07-01踩坑)。
+    #    放到 10 点，给汇率任务留足时间；结算逻辑也已加"退回最近可用汇率"兜底。
+    # 每月16号上午10点自动结算1-15号（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=10, minute=0, second=0), id="auto_settle_first_half")
+    # 每月1号上午10点自动结算上月16号-月底（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=1, hour=10, minute=0, second=0), id="auto_settle_second_half")
     scheduler.start()
     logger.info("Scheduler started with Beijing timezone (CST)")
 
