@@ -37,7 +37,14 @@ async def sync_master_products(db: Session) -> dict:
                     ex = db.query(Product).filter(Product.wemall_product_id == gid).first()
                 if ex:
                     ex.name = it.get("title", ex.name)
-                    ex.wemall_product_id = gid
+                    # wemall_product_id 有唯一索引：只在该 gid 没被别的产品占用时才更新，
+                    # 否则(母库同一UPC挂了多个goodsId=重复商品)会撞 1062 唯一键→整批同步崩溃。
+                    if ex.wemall_product_id != gid:
+                        holder = db.query(Product).filter(
+                            Product.wemall_product_id == gid, Product.id != ex.id
+                        ).first()
+                        if holder is None:
+                            ex.wemall_product_id = gid
                     if sku:
                         ex.sku = sku
                     ex.image_url = it.get("defaultImageUrl", ex.image_url)

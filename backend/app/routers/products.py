@@ -203,7 +203,13 @@ async def sync_products_by_ids(
 
             if existing:
                 existing.name = item.get("title", existing.name)
-                existing.wemall_product_id = goods_id
+                # wemall_product_id 唯一索引：仅当无其他产品占用该 gid 时才更新（防重复UPC撞1062）
+                if existing.wemall_product_id != goods_id:
+                    _holder = db.query(Product).filter(
+                        Product.wemall_product_id == goods_id, Product.id != existing.id
+                    ).first()
+                    if _holder is None:
+                        existing.wemall_product_id = goods_id
                 if sku_code:
                     existing.sku = sku_code
                 existing.image_url = item.get("defaultImageUrl", existing.image_url)

@@ -4,6 +4,20 @@
 
 ---
 
+## 第四批改动（2026-07-01 产品同步撞唯一键崩溃修复：母库重复UPC）
+
+**现象**：点"同步蔚蓝产品"报 502 `(1062, "Duplicate entry '123779020102721' for key 'products.ix_products_wemall_product_id'")`，新建的产品一个都导不进来（整批崩溃）。
+
+**根因**：产品库有一对重复产品（id=941/947，都是"念珠菌全效配方"，同 UPC `855571001051`，但 wemall_product_id 不同）。因为**蔚蓝母库把同一个 UPC 挂在了两个 goodsId 上**（旧 `123774049102721` + 用户新建的 `123779020102721`）。同步按 SKU 匹配到 941（`.first()` 取 id 最小），却盲目 `ex.wemall_product_id = gid` 把 941 改成 947 已占用的 gid → `wemall_product_id` 唯一索引撞 1062 → 整批同步事务崩溃。
+
+**修复（product_sync.py `sync_master_products` + products.py `sync_products_by_ids` 两处）**：赋值 `wemall_product_id` 前先查是否有**别的产品**已占用该 gid（`filter(wemall_product_id==gid, id!=ex.id)`），占用了就**跳过赋值、不覆盖**，避免撞唯一键。总额/匹配不受影响。
+
+**数据清理**：删除孤立重复行 id=947（确认 `order_items` 无任何引用，安全）。清理后全库重复 SKU 组=0。重跑同步：created 2 / updated 995 / 共 997，无崩溃，新产品成功导入。
+
+**遗留（用户侧）**：蔚蓝母库 UPC `855571001051` 仍挂在两个 goodsId 上（用户新建产品时复用了已存在 UPC）。建议每个新产品用唯一 UPC，或去蔚蓝删重复——否则该记录的 wemall_product_id 会在两个 goodsId 间来回跳（无害，仅不干净）。
+
+---
+
 ## 第三批改动（2026-07-01 结算三修：未录价漏结7万 + 汇率兜底 + 自动结算时序）
 
 **背景**：7/1 结算管理页无自动账单，用户问为何 6/16–6/30 那期没自动 loading 出来。排查发现自动结算 0 点跑时报 `今日汇率未录入`，且逻辑有漏结 bug。
