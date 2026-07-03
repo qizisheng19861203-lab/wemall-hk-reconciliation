@@ -354,6 +354,63 @@ def cash_daily(
     }
 
 
+def _fetch_beisi_waybills() -> dict:
+    """从快递云打印系统取倍赛思'真有物流单号=确实发货'的 {order_no: waybill}。
+    ⚠️ 对账系统自身的微盟'发货状态'对退款单不可靠(全退单被微盟标成已完成→误判已发)，
+    真正判断是否发货必须以打印系统的物流单号为准。失败则返回空(宁可少列，不误列)。"""
+    import httpx
+    try:
+        r = httpx.get("https://print.blue-medicine.com/api/inventory/beisi_shipped_waybills",
+                      params={"secret": "bp_toggle_2026_wm"}, timeout=8.0)
+        if r.status_code == 200:
+            return r.json().get("waybills") or {}
+    except Exception:
+        pass
+    return {}
+
+
+@router.get("/problem-refunds")
+def problem_refunds(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """问题订单：**真发了货(打印系统有物流单号)** 却又退款的订单——货发出去了钱却退了，需留意/追回。
+    以物流单号为准，不用对账自身的发货状态(对退款单会误判)。排除测试单。
+    """
+    waybill_map = _fetch_beisi_waybills()
+    orders = (
+        db.query(Order)
+        .filter(
+            _active_store_filter(db),
+            Order.is_test == False,
+            Order.is_refunded == True,
+        )
+        .options(joinedload(Order.items))
+        .order_by(Order.order_date.desc())
+        .all()
+    )
+    result = []
+    total_supply = 0.0
+    for o in orders:
+        wb = waybill_map.get(str(o.wemall_order_id))
+        if not wb:
+            continue  # 没有真实物流单号 = 货没真发 = 干净退款，不列入
+        supply = sum(float(it.supply_subtotal or 0) for it in o.items)
+        total_supply += supply
+        result.append({
+            "wemall_order_id": o.wemall_order_id,
+            "buyer_name": o.buyer_name or "",
+            "order_date": (o.order_date + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if o.order_date else "",
+            "waybill": wb,
+            "item_count": len(o.items),
+            "supply_rmb": round(supply, 2),
+            "items": [
+                {"name": it.product_name or "", "qty": it.quantity,
+                 "supply_subtotal": float(it.supply_subtotal) if it.supply_subtotal else None}
+                for it in o.items
+            ],
+        })
+    return {"total": len(result), "total_supply_rmb": round(total_supply, 2),
+            "waybill_source_ok": bool(waybill_map), "orders": result}
+
+
 @router.post("/bulk-mark-test")
 def bulk_mark_test(
     db: Session = Depends(get_db),

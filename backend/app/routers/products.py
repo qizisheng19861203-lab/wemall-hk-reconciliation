@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
 from app.models.product import Product
-from app.models.order import OrderItem
+from app.models.order import Order, OrderItem
 from app.models.user import User, UserRole
 from app.core.deps import get_current_user, require_admin
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
@@ -71,13 +71,16 @@ async def update_product(
     db.refresh(product)
 
     # 自动补录：如果更新了供货价，将所有关联的待录价订单条目补齐
+    # ⚠️ 只补未结算订单——已结算订单的金额已开票，回填会导致结算单总额≠订单明细(账实不符)
     backfilled_count = 0
     if new_supply_price is not None:
         items_to_backfill = (
             db.query(OrderItem)
+            .join(Order, OrderItem.order_id == Order.id)
             .filter(
                 OrderItem.product_id == product_id,
                 OrderItem.supply_price.is_(None),
+                Order.settlement_id.is_(None),
             )
             .all()
         )
@@ -897,12 +900,14 @@ async def import_supply_price(
             if product:
                 product.supply_price = supply_price
                 updated += 1
-                # 补录该产品的待录价订单条目
+                # 补录该产品的待录价订单条目（只补未结算订单，防已开票账单金额漂移）
                 items_to_backfill = (
                     db.query(OrderItem)
+                    .join(Order, OrderItem.order_id == Order.id)
                     .filter(
                         OrderItem.product_id == product.id,
                         OrderItem.supply_price.is_(None),
+                        Order.settlement_id.is_(None),
                     )
                     .all()
                 )

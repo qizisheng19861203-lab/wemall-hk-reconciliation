@@ -92,7 +92,12 @@ async def sync_orders(
                 existing = db.query(Order).filter(Order.wemall_order_id == order_no).first()
 
                 create_time = base_info.get("createTime")
-                order_date = datetime.fromtimestamp(create_time / 1000) if create_time else datetime.now()
+                # createTime 是 UTC 毫秒；显式按 UTC 转 naive(库里统一存 UTC)，不依赖容器时区
+                from datetime import timezone as _tz
+                order_date = (
+                    datetime.fromtimestamp(create_time / 1000, tz=_tz.utc).replace(tzinfo=None)
+                    if create_time else datetime.utcnow()
+                )
 
                 order_status = base_info.get("orderStatus", 0)
                 # 已取消(9)：不新建；若已入库则标记退款，排除结算/统计
@@ -142,21 +147,30 @@ async def sync_orders(
                     if phone and not (existing.buyer_phone or "").strip():
                         existing.buyer_phone = phone
                     # 补录：重新匹配 product_id 和 supply_price
-                    if items_list and existing.items:
+                    # ⚠️ 已结算订单跳过——回填会改已开票账单的明细金额(账实不符)
+                    if items_list and existing.items and existing.settlement_id is None:
                         for ex_item in existing.items:
-                            # product_id 为空时，直接按已存的 sku(UPC) 重匹配产品库（产品库后来补全了就能匹配上）
+                            # 解析产品：product_id 为空时按 sku(UPC) 重匹配；已匹配则直接取该产品
+                            matched_product = None
                             if ex_item.product_id is None:
                                 sku_code = str(ex_item.sku or "").strip()
                                 matched_product = db.query(Product).filter(Product.sku == sku_code).first() if sku_code else None
                                 if matched_product:
                                     ex_item.product_id = matched_product.id
-                                    if matched_product.supply_price and not ex_item.supply_price:
-                                        ex_item.supply_price = matched_product.supply_price
-                                        ex_item.supply_subtotal = matched_product.supply_price * ex_item.quantity
-                            # 补录零售价
+                            else:
+                                matched_product = db.query(Product).filter(Product.id == ex_item.product_id).first()
+                            # 补供货价：只要产品库有价、条目却没价就补（修复"产品有机构价但没回填到订单"的遗漏，
+                            # 原逻辑只在 product_id 从空→有 时补，一旦 product_id 已设、价却为空就永远补不上）
+                            if matched_product and matched_product.supply_price and not ex_item.supply_price:
+                                ex_item.supply_price = matched_product.supply_price
+                                ex_item.supply_subtotal = matched_product.supply_price * ex_item.quantity
+                            # 补录零售价（ex_item.sku 通常是 goodsCode/skuCode，兜底才是 skuId——三个都比对）
                             if ex_item.retail_price is None or float(ex_item.retail_price) == 0:
                                 for item_data in items_list:
-                                    if str(item_data.get("skuId", "")) == (ex_item.sku or ""):
+                                    _keys = {str(item_data.get("skuId", "")),
+                                             str(item_data.get("goodsCode") or "").strip(),
+                                             str(item_data.get("skuCode") or "").strip()}
+                                    if (ex_item.sku or "") in _keys:
                                         rp = float(item_data.get("salePrice") or item_data.get("skuPrice") or item_data.get("goodsPrice") or 0)
                                         if rp > 0:
                                             ex_item.retail_price = rp

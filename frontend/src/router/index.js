@@ -16,6 +16,7 @@ const routes = [
       { path: 'orders', component: () => import('@/views/Orders.vue') },
       { path: 'products', component: () => import('@/views/Products.vue'), meta: { adminOnly: true } },
       { path: 'settlements', component: () => import('@/views/Settlements.vue') },
+      { path: 'problem-orders', component: () => import('@/views/ProblemOrders.vue'), meta: { adminOnly: true } },
       { path: 'rates', component: () => import('@/views/ExchangeRates.vue') },
       { path: 'reports', component: () => import('@/views/Reports.vue') },
       { path: 'users', component: () => import('@/views/Users.vue'), meta: { adminOnly: true } },

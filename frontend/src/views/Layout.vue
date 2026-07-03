@@ -14,6 +14,7 @@
         <el-menu-item index="/orders"><el-icon><List /></el-icon>订单管理</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/products"><el-icon><Goods /></el-icon>产品库</el-menu-item>
         <el-menu-item index="/settlements"><el-icon><Money /></el-icon>结算管理</el-menu-item>
+        <el-menu-item v-if="auth.isAdmin" index="/problem-orders"><el-icon><Warning /></el-icon>问题订单</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/reports"><el-icon><TrendCharts /></el-icon>统计报表</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/users"><el-icon><User /></el-icon>用户管理</el-menu-item>
         <el-menu-item v-if="auth.isAdmin" index="/notification-contacts"><el-icon><Bell /></el-icon>通知号码</el-menu-item>

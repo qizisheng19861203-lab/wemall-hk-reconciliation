@@ -33,6 +33,7 @@ export const orders = {
   update: (id, data) => http.put(`/orders/${id}`, data),
   stats: (params) => http.get('/orders/stats', { params }),
   today: () => http.get('/orders/today'),
+  problemRefunds: () => http.get('/orders/problem-refunds'),
   cashDaily: (params) => http.get('/orders/cash-daily', { params }),
   syncWemall: (params) => http.post('/orders/sync-wemall', null, { params }),
   bulkMarkTest: () => http.post('/orders/bulk-mark-test'),
