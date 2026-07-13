@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "微盟香港对账系统"
     SECRET_KEY: str = "change-this-to-a-strong-secret-key-in-production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 365 * 10  # 10 年（内部专用系统，等同永久，免频繁重登）
 
     # Database
     DATABASE_URL: str = "mysql+pymysql://root:password@db:3306/wemall_hk"

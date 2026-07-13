@@ -365,8 +365,10 @@ import { Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orders as ordersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 // order_date 是 UTC 朴素时间，转北京(Asia/Shanghai)显示「MM-DD HH:mm」
 function fmtBJ(s) {
@@ -594,7 +596,17 @@ async function exportExcel() {
     const params = { ...currentFilterParams(), supply_only: filter.supply_only || undefined }
     const url = ordersApi.exportUrl(params)
     const token = localStorage.getItem('token')
+    if (!token) {
+      ElMessage.error('登录已过期，请重新登录后再导出')
+      localStorage.removeItem('user'); router.push('/login'); return
+    }
     const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    if (resp.status === 401 || resp.status === 403) {
+      // 令牌失效/未认证 → 清理并跳登录，别给"导出失败(401)"这种看不懂的提示
+      localStorage.removeItem('token'); localStorage.removeItem('user')
+      ElMessage.error('登录已过期，请重新登录后再导出')
+      router.push('/login'); return
+    }
     if (!resp.ok) throw new Error(`导出失败 (${resp.status})`)
     const blob = await resp.blob()
     const objectUrl = window.URL.createObjectURL(blob)

@@ -13,9 +13,15 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (res) => res.data,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status
+    const detail = err.response?.data?.detail
+    // 未认证 = 401，或 403 且是 HTTPBearer 的"Not authenticated"(令牌丢失/未带) → 清令牌跳登录。
+    // 注意：403 且带有效令牌但权限不足(如运营点管理员接口)不算未认证，只提示不跳转。
+    const notAuthed = status === 401 || (status === 403 && /not authenticated/i.test(String(detail || '')))
+    if (notAuthed) {
       localStorage.removeItem('token')
-      router.push('/login')
+      localStorage.removeItem('user')
+      if (router.currentRoute.value.path !== '/login') router.push('/login')
     }
 
     // 显示详细错误信息（内部系统，方便调试）

@@ -28,7 +28,7 @@ def list_products(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),  # ⚠️ 产品库含机构价/供货价，仅管理员可读（运营/分销商直接调API也拦住，防机构价泄露）
 ):
     q = db.query(Product)
     if is_active is not None:
