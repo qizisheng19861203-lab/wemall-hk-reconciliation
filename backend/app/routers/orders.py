@@ -354,6 +354,55 @@ def cash_daily(
     }
 
 
+@router.get("/price-alerts")
+def price_alerts(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """零供货价告警：扫描本店非测试非退款订单里 supply_price 为 0/空 的条目。
+    🔴 red = 该 SKU 在产品库里有档（=我方供货），却 0价 → 绝对不允许，会亏钱，必须补。
+    ⚪ yellow = 该 SKU 产品库里没有 → 可能是倍赛思自营(如Ani)，也可能是漏建的我方产品，需人工确认。
+    """
+    from app.models.product import Product
+    items = (
+        db.query(OrderItem, Order)
+        .join(Order, OrderItem.order_id == Order.id)
+        .filter(
+            _active_store_filter(db),
+            Order.is_test == False,
+            Order.is_refunded == False,
+            ((OrderItem.supply_price == None) | (OrderItem.supply_price == 0)),  # noqa: E711
+        )
+        .all()
+    )
+    # 按 sku 聚合
+    agg = {}
+    for it, o in items:
+        sku = str(it.sku or "")
+        a = agg.setdefault(sku, {"sku": sku, "name": it.product_name or "", "qty": 0,
+                                 "unsettled": 0, "settled": 0})
+        a["qty"] += it.quantity
+        if o.settlement_id:
+            a["settled"] += 1
+        else:
+            a["unsettled"] += 1
+    red, yellow = [], []
+    for sku, a in agg.items():
+        p = db.query(Product).filter(Product.sku == sku).first() if sku else None
+        a["lib_price"] = float(p.supply_price) if (p and p.supply_price is not None) else None
+        if p:  # SKU 在产品库有档 = 我方供货
+            red.append(a)
+        else:
+            yellow.append(a)
+    red.sort(key=lambda x: -x["qty"])
+    yellow.sort(key=lambda x: -x["qty"])
+    return {
+        "red_count": len(red),
+        "red_qty": sum(a["qty"] for a in red),
+        "yellow_count": len(yellow),
+        "yellow_qty": sum(a["qty"] for a in yellow),
+        "red": red,
+        "yellow": yellow,
+    }
+
+
 def _fetch_beisi_waybills() -> dict:
     """从快递云打印系统取倍赛思'真有物流单号=确实发货'的 {order_no: waybill}。
     ⚠️ 对账系统自身的微盟'发货状态'对退款单不可靠(全退单被微盟标成已完成→误判已发)，

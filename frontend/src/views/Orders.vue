@@ -1,5 +1,32 @@
 <template>
   <div>
+    <!-- 🔴 零供货价告警（仅管理员，我方供货产品出现0/空价时红标） -->
+    <el-alert v-if="auth.isAdmin && alerts.red_count > 0" type="error" :closable="false"
+      show-icon style="margin-bottom:14px;align-items:flex-start"
+      :title="`⚠️ 发现 ${alerts.red_count} 款我方供货产品结算价为 0/空（共 ${alerts.red_qty} 件）——会亏钱，必须立即补价！`">
+      <template #default>
+        <div style="margin-top:6px">
+          <div v-for="r in alerts.red" :key="r.sku" style="font-size:13px;padding:2px 0;color:#7a1212">
+            · <b>{{ r.name.slice(0,34) }}</b>（{{ r.sku }}）{{ r.qty }}件
+            <span style="color:#b91c1c">未结{{ r.unsettled }}·已结{{ r.settled }}</span>
+            <span v-if="r.lib_price" style="color:#059669">｜产品库价 ¥{{ r.lib_price }}，回填即可</span>
+            <span v-else style="color:#b91c1c">｜产品库未录价，请去产品库补价</span>
+          </div>
+          <div style="font-size:12px;color:#991b1b;margin-top:6px">处理：产品库有价的→改一次供货价会自动回填；产品库无价的→去产品库录价。补完本告警自动消失。</div>
+        </div>
+      </template>
+    </el-alert>
+    <!-- ⚪ 未建档商品提示（可能自营，也可能漏建的我方产品，需确认） -->
+    <el-alert v-if="auth.isAdmin && alerts.yellow_count > 0" type="warning" :closable="false"
+      show-icon style="margin-bottom:14px"
+      :title="`${alerts.yellow_count} 款未建档商品无结算价（共 ${alerts.yellow_qty} 件）——多为倍赛思自营(如Ani)，但请确认没有漏建的我方产品`">
+      <template #default>
+        <div style="font-size:12.5px;color:#92600a;margin-top:4px">
+          <span v-for="(y,i) in alerts.yellow" :key="y.sku">{{ i>0?'；':'' }}{{ y.name.slice(0,20) }}({{ y.qty }}件)</span>
+        </div>
+      </template>
+    </el-alert>
+
     <!-- 顶部未结算金额 -->
     <el-card shadow="never" style="margin-bottom:16px;background:#fff7e6;border-color:#ffd591">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
@@ -402,6 +429,7 @@ const quickMode = ref('month')
 const stats = reactive({ unsettled_rmb: 0, total_supply_rmb: 0, total_orders: 0, total_refund_rmb: 0 })
 const today = reactive({ date: '', order_count: 0, supply_rmb: 0, cash_rmb: 0, stored_value_rmb: 0, refund_rmb: 0 })
 const todayLoading = ref(false)
+const alerts = reactive({ red_count: 0, red_qty: 0, yellow_count: 0, yellow_qty: 0, red: [], yellow: [] })
 const cash = reactive({ days: [], total_cash: 0, total_stored_value: 0, total_refund_cash: 0, net_cash: 0 })
 const cashLoading = ref(false)
 const showCashDetail = ref(false)
@@ -678,6 +706,14 @@ async function loadCashDaily() {
   }
 }
 
+async function loadAlerts() {
+  if (!auth.isAdmin) return
+  try {
+    const res = await ordersApi.priceAlerts()
+    Object.assign(alerts, res)
+  } catch (e) { /* 静默：告警拉取失败不阻断主流程 */ }
+}
+
 async function loadToday() {
   todayLoading.value = true
   try {
@@ -697,7 +733,7 @@ async function loadToday() {
 
 async function refreshStats() {
   // 并行加载，别串行等（原来串行 ~3 倍耗时）
-  await Promise.all([loadStats(), loadOrders(), loadPeriodStats(), loadCashDaily(), loadToday()])
+  await Promise.all([loadStats(), loadOrders(), loadPeriodStats(), loadCashDaily(), loadToday(), loadAlerts()])
 }
 
 function doSearch() {
@@ -813,12 +849,14 @@ onMounted(() => {
   loadPeriodStats()
   loadCashDaily()
   loadToday()
+  loadAlerts()
   autoRefreshTimer = setInterval(() => {
     loadStats()
     loadOrders()
     loadPeriodStats()
     loadCashDaily()
     loadToday()
+    loadAlerts()
   }, 10 * 60 * 1000)
 })
 

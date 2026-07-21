@@ -34,6 +34,7 @@ export const orders = {
   stats: (params) => http.get('/orders/stats', { params }),
   today: () => http.get('/orders/today'),
   problemRefunds: () => http.get('/orders/problem-refunds'),
+  priceAlerts: () => http.get('/orders/price-alerts'),
   cashDaily: (params) => http.get('/orders/cash-daily', { params }),
   syncWemall: (params) => http.post('/orders/sync-wemall', null, { params }),
   bulkMarkTest: () => http.post('/orders/bulk-mark-test'),
