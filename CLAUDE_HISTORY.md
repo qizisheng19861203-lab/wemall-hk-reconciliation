@@ -21,6 +21,26 @@
 
 ---
 
+## 第八批改动（2026-07-16 倍赛思商品详情同步：发现专用安全接口 goods/description/update）
+
+**需求**：倍赛思甄选上我方供货的产品，好几个详情(goodsDesc)不完整（当时创建/粘贴只截了一部分），要从蔚蓝母库同步完整详情，且**绝不能动价格/成本/库存/分类/上架**。
+
+### 一、🔑 关键发现：`goods/description/update` 专用改详情接口
+- **绝不能用 `goods/update` 改详情**——它是整体覆盖，实测有两个副作用：① `skuStockNum` 是**增量**（传36→库存翻倍成72）② 会**清空店铺分类** `goodsClassifyList`（我传的字段名不被接受）。
+- 探测发现微盟有专用接口 **`goods/description/update`**（参数只要 `goodsId` + `basicInfo.vid` + `goodsDesc`）——实测**只改详情，价格/成本/库存/分类/上架/图片分毫不动**。已封装为 `wemall_api.update_goods_description(goods_id, desc)`。
+- 附带学到（万一要用 goods/update）：分类字段是 `goodsClassifyIdList`，库存增量传 0 才不变。测试品小球藻(177354386569)被 goods/update 弄乱的库存(kuaidi同步自动修回36)和分类(手动用 goodsClassifyIdList 恢复)都已修复。
+
+### 二、批量同步结果
+- 扫描倍赛思 269 个商品：**我方供货且详情不完整 43 个**（220个已完整、4个非我方供货、1个无蔚蓝档）。判定"不完整"= 蔚蓝 goodsDesc 比倍赛思长 >1000 字符。最大缺口 +71080（乳腺保护因子只录了26%）。
+- 用 `goods/description/update` 逐个把蔚蓝完整详情推到倍赛思，每个产品前后快照验证：**43 个全部成功，0 失败，0 副作用**（价格/成本/库存/分类/上架全不变，只详情变长）。
+- 匹配用 UPC：倍赛思 outerGoodsCode → 产品库 Product.sku → 产品库 wemall_product_id = 蔚蓝 goodsId。
+
+### 三、教训（写死铁律）
+- **同步详情永远用 `goods/description/update`，绝不用 `goods/update`**（后者整体覆盖，动库存+清分类）。
+- 长时间微盟批量操作用**后台 detached 脚本 + 写文件 + Monitor 轮询**，别用 SSH 一次性长跑（会话易断；且服务器 sshd 对频繁连接会掐断，遵新加坡命脉铁律不重连风暴）。
+
+---
+
 ## 第七批改动（2026-07-16 ADEK建档遗漏修正 + 零供货价告警机制）
 
 ### 一、青少年ADEK建档遗漏 → 第一期账单更正（数据修正）

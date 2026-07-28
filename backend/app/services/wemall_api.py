@@ -295,3 +295,15 @@ class WemallAPI:
             "basicInfo": {"vid": vid},
             "goodsList": [{"goodsId": goods_id, "skuList": sku_stock_list}],
         })
+
+    async def update_goods_description(self, goods_id: int, goods_desc: str) -> dict:
+        """★只更新商品详情(goodsDesc)的专用接口 `goods/description/update`。
+        ⚠️ 详情同步必须用这个——它只碰 goodsDesc，绝不动价格/成本/库存/分类/上架/图片。
+        绝不能用 `goods/update` 改详情：那是整体覆盖，会把 skuStockNum 当增量翻倍库存、还会清空店铺分类
+        (2026-07-16 实测踩坑；分类字段是 goodsClassifyIdList、库存增量传0才不变)。"""
+        vid = await self._get_organization_vid()
+        return await self._request("goods/description/update", {
+            "goodsId": int(goods_id),
+            "basicInfo": {"vid": vid},
+            "goodsDesc": goods_desc,
+        })
