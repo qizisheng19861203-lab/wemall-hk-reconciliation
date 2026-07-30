@@ -623,31 +623,42 @@ async def push_products_to_store(
         if freight_templates:
             delivery_config["templateId"] = freight_templates[0].get("templateId")
 
-    # 获取目标店铺已有的所有规格值（逐个取详情直到收集够）
-    target_spec_values = {}  # {specValueName: {specId, specValueId}}
+    # 获取目标店铺已有的规格值。⚠️ 关键：倍赛思有多个"规格"specId（不同产品各自建的），
+    # 若 specInfoList 用一个 specId、skuList 用另一个 → 微盟报"规格里不存在sku规格{specId}"。
+    # 修法：只用【在售产品】(下架产品 specId 杂乱不可靠) 收集，按 specId 分组，
+    # 挑规格值最全的那个 specId 作为店铺【统一规格】，之后 specInfoList 和 skuList 全程只用它。
+    target_spec_values = {}  # {specValueName: {specId(=统一), specValueId}}
     target_spec_id = None
     try:
-        target_products = await target_api.get_products(page=1, page_size=20)
-        specs_found_from = 0
-        for tp in target_products.get("pageList", []):
-            tp_detail = await target_api.get_product_detail(str(tp.get("goodsId")))
-            has_spec = False
-            for spec in tp_detail.get("specInfoList", []):
-                if not target_spec_id:
-                    target_spec_id = spec.get("specId")
-                for sv in spec.get("skuSpecValueList", []):
-                    name = sv.get("specValueName", "")
-                    if name and name not in target_spec_values:
-                        target_spec_values[name] = {
-                            "specId": spec.get("specId"),
-                            "specValueId": sv.get("specValueId"),
-                        }
-                        has_spec = True
-            if has_spec:
-                specs_found_from += 1
-            # 从5个不同产品收集到规格值就够了
-            if specs_found_from >= 5:
+        _tvid = await target_api._get_organization_vid()
+        _groups = {}  # {specId: {name: specValueId}}
+        for _pg in (1, 2):  # 扫在售前40个足够覆盖规范规格
+            _r = await target_api._request("goods/getList", {
+                "pageNum": _pg, "pageSize": 20,
+                "queryParameter": {"goodsStatus": 1, "searchType": 1},
+                "basicInfo": {"vid": _tvid},
+            })
+            _its = _r.get("pageList", [])
+            if not _its:
                 break
+            for tp in _its:
+                tp_detail = await target_api.get_product_detail(str(tp.get("goodsId")))
+                for spec in tp_detail.get("specInfoList", []):
+                    _sid = spec.get("specId")
+                    _grp = _groups.setdefault(_sid, {})
+                    for sv in spec.get("skuSpecValueList", []):
+                        nm = sv.get("specValueName", "")
+                        if nm and nm not in _grp:
+                            _grp[nm] = sv.get("specValueId")
+            if _pg * 20 >= _r.get("totalCount", 0):
+                break
+        if _groups:
+            # 规格值最全的 specId = 店铺统一规格
+            target_spec_id = max(_groups, key=lambda s: len(_groups[s]))
+            target_spec_values = {
+                nm: {"specId": target_spec_id, "specValueId": vid}
+                for nm, vid in _groups[target_spec_id].items()
+            }
     except Exception:
         pass
 
@@ -763,7 +774,9 @@ async def push_products_to_store(
                             matched = src_to_target.get(key)
                             if matched:
                                 sku_entry["skuSpecValueList"].append({
-                                    "specId": matched["specId"],
+                                    # 必须用统一 specId（=specInfoList 的 specId），绝不能用 matched 自带的，
+                                    # 否则 sku 规格 specId 与 specInfoList 对不上 → 微盟报"规格里不存在sku规格"
+                                    "specId": target_spec_id,
                                     "specValueId": matched["specValueId"],
                                 })
                         if sku_entry["skuSpecValueList"]:

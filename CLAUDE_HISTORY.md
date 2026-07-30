@@ -21,6 +21,21 @@
 
 ---
 
+## 第九批改动（2026-07-16 同步产品到倍赛思规格报错修复：specId不一致）
+
+**现象**：同步蔚蓝产品到倍赛思时报 `微盟 API 错误: 商品规格里不存在sku规格 10975287799679`（如 Vascanox 一氧化氮）。
+
+**根因**：倍赛思**多个"规格"specId 并存**（在售产品统一用 `10975325799679`，但下架产品有杂 specId 如 `10975287799679`）。push-to-store 收集目标店铺规格值时用的 `get_products()` 是 **goodsStatus=0(下架)**，把杂 specId 收进来了；结果 specInfoList 用一个 specId、skuList 里 sku 值用另一个(`matched["specId"]`)→ 两者对不上 → 微盟拒绝。
+
+**修复(products.py push-to-store)**：
+1. 收集目标规格值改用**在售产品**(goodsStatus=1，扫前40个)，按 specId **分组**，挑**规格值最全的 specId 作为店铺统一规格** target_spec_id。
+2. specInfoList 与 skuList 全程只用 target_spec_id（skuList 的 sku 值 specId 改成 `target_spec_id`，绝不用 matched 自带的）。
+3. 这样 specInfoList.specId == 每个 sku 值的 specId，且所有 specValueId 都归属它。
+
+**验证**：Vascanox(id=981) 同步成功 goodsId 157820591799679——specInfoList 与 2 个 sku(国内现货/加州直邮) 全用 specId 10975325799679，售价780/成本390 正确。（新品详情偏短可再用 goods/description/update 补，见第八批）
+
+---
+
 ## 第八批改动（2026-07-16 倍赛思商品详情同步：发现专用安全接口 goods/description/update）
 
 **需求**：倍赛思甄选上我方供货的产品，好几个详情(goodsDesc)不完整（当时创建/粘贴只截了一部分），要从蔚蓝母库同步完整详情，且**绝不能动价格/成本/库存/分类/上架**。
