@@ -73,10 +73,16 @@ def start_scheduler():
     scheduler.add_job(_daily_product_sync, CronTrigger(hour=3, minute=30), id="product_sync")
     # ⚠️ 自动结算必须晚于 9 点汇率任务：结算要用当日汇率，0 点跑时今日汇率还没抓到会失败(2026-07-01踩坑)。
     #    放到 10 点，给汇率任务留足时间；结算逻辑也已加"退回最近可用汇率"兜底。
-    # 每月16号上午10点自动结算1-15号（北京时间）
-    scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=10, minute=0, second=0), id="auto_settle_first_half")
-    # 每月1号上午10点自动结算上月16号-月底（北京时间）
-    scheduler.add_job(_auto_settle, CronTrigger(day=1, hour=10, minute=0, second=0), id="auto_settle_second_half")
+    # ⚠️ 2026-09-01踩坑：原来设在 10:00:00，和每10分钟的订单同步(:00触发)【同一秒抢】，
+    #    APScheduler 默认容错只 1 秒，订单同步调微盟占住这一秒→自动结算错过窗口被静默跳过→账单神秘不出。
+    #    修法：① 挪到 10:05(避开 :00/:10 的订单同步) ② misfire_grace_time=3600(晚1小时内仍补跑)
+    #    ③ coalesce=True(错过多次只补1次)。
+    # 每月16号上午10:05自动结算1-15号（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=16, hour=10, minute=5, second=0),
+                      id="auto_settle_first_half", misfire_grace_time=3600, coalesce=True)
+    # 每月1号上午10:05自动结算上月16号-月底（北京时间）
+    scheduler.add_job(_auto_settle, CronTrigger(day=1, hour=10, minute=5, second=0),
+                      id="auto_settle_second_half", misfire_grace_time=3600, coalesce=True)
     scheduler.start()
     logger.info("Scheduler started with Beijing timezone (CST)")
 
