@@ -199,14 +199,24 @@ async def sync_orders(
 
                     for item_data in items_list:
                         goods_id = str(item_data.get("goodsId", ""))
-                        sku_code = str(item_data.get("goodsCode") or item_data.get("skuCode") or "").strip()
+                        # 多规格商品每个规格各有 UPC 时: goodsCode=商品级码(不随规格变),
+                        # skuCode=所购规格的真码(实测 血糖综合360粒: goodsCode=879452007857/skuCode=879452003002)。
+                        # 规格码只在能精确命中产品库时才优先, 否则回退商品级码 → 单规格商品行为完全不变。
+                        # 首例: 槲皮素90片(791760013101,供货470) vs 180片(791760013200,供货910)同一商品两规格。
+                        _spec_code = str(item_data.get("skuCode") or "").strip()
+                        _goods_code = str(item_data.get("goodsCode") or "").strip()
 
-                        # 匹配产品：优先用 SKU 编码匹配，再用 goodsId
                         product = None
-                        if sku_code:
-                            product = db.query(Product).filter(Product.sku == sku_code).first()
+                        matched_code = ""
+                        for _code in (_spec_code, _goods_code):
+                            if _code:
+                                product = db.query(Product).filter(Product.sku == _code).first()
+                                if product:
+                                    matched_code = _code
+                                    break
                         if not product and goods_id:
                             product = db.query(Product).filter(Product.wemall_product_id == goods_id).first()
+                        sku_code = matched_code or _goods_code or _spec_code
 
                         qty = int(item_data.get("skuNum", 1))
                         # 尝试多个价格字段名（微盟API字段名可能不同）
