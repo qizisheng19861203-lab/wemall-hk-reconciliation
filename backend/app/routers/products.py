@@ -11,6 +11,9 @@ from app.services.wemall_api import WemallAPI
 from decimal import Decimal
 import pandas as pd
 import io
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def _subtotal(price, qty) -> Decimal:
@@ -623,19 +626,28 @@ async def push_products_to_store(
         if freight_templates:
             delivery_config["templateId"] = freight_templates[0].get("templateId")
 
-    # 获取目标店铺已有的规格值。⚠️ 关键：倍赛思有多个"规格"specId（不同产品各自建的），
-    # 若 specInfoList 用一个 specId、skuList 用另一个 → 微盟报"规格里不存在sku规格{specId}"。
-    # 修法：只用【在售产品】(下架产品 specId 杂乱不可靠) 收集，按 specId 分组，
-    # 挑规格值最全的那个 specId 作为店铺【统一规格】，之后 specInfoList 和 skuList 全程只用它。
-    target_spec_values = {}  # {specValueName: {specId(=统一), specValueId}}
-    target_spec_id = None
-    try:
+    # 获取目标店铺已有的规格值。⚠️ 微盟要求：specInfoList 与 skuList 必须用【同一个】specId，
+    # 否则报"规格里不存在sku规格{specId}"（2026-07-31 修过一次）。
+    #
+    # ⛔⛔ 2026-09-09 事故：旧代码用「规格值最多的 specId」当店铺统一规格 —— 这是个会随
+    #     店铺状态漂移的启发式，代码一行没改也会自己坏掉。实测倍赛思 274 个商品里【在售只剩 4 个】，
+    #     其中 2 个是它自家的 Ani 维C(specId=10975130799679，规格名"数量"，5 个值：
+    #     三包装/五包装/十包装/二十包/一包装)，压过了仓别规格(specId=10975325799679，
+    #     规格名"规格"，3 个值：加州直邮/国内现货/加州直邮(单瓶+隔热膜))。
+    #     于是 max() 选中"数量" → 新品的"加州直邮/国内现货"在池子里找不到 →
+    #     旧的兜底 "return first[0]" 直接抓了"三包装"顶上 → 规格被写成完全不相干的值。
+    # 修法：① 保留【全部】specId 分组，不再预先选一个；
+    #      ② 按【每个产品自己的规格值】挑能全覆盖的 specId（_pick_spec_group）；
+    #      ③ 覆盖不了就补扫下架商品；还不行就【报错不推】，绝不拿无关规格值顶替。
+    target_spec_groups = {}   # {specId: {specValueName: specValueId}}
+    target_spec_names = {}    # {specId: specName}
+
+    async def _harvest(goods_status: int, max_pages: int):
         _tvid = await target_api._get_organization_vid()
-        _groups = {}  # {specId: {name: specValueId}}
-        for _pg in (1, 2):  # 扫在售前40个足够覆盖规范规格
+        for _pg in range(1, max_pages + 1):
             _r = await target_api._request("goods/getList", {
                 "pageNum": _pg, "pageSize": 20,
-                "queryParameter": {"goodsStatus": 1, "searchType": 1},
+                "queryParameter": {"goodsStatus": goods_status, "searchType": 1},
                 "basicInfo": {"vid": _tvid},
             })
             _its = _r.get("pageList", [])
@@ -645,22 +657,93 @@ async def push_products_to_store(
                 tp_detail = await target_api.get_product_detail(str(tp.get("goodsId")))
                 for spec in tp_detail.get("specInfoList", []):
                     _sid = spec.get("specId")
-                    _grp = _groups.setdefault(_sid, {})
+                    target_spec_names.setdefault(_sid, spec.get("specName", "") or "规格")
+                    _grp = target_spec_groups.setdefault(_sid, {})
                     for sv in spec.get("skuSpecValueList", []):
                         nm = sv.get("specValueName", "")
                         if nm and nm not in _grp:
                             _grp[nm] = sv.get("specValueId")
             if _pg * 20 >= _r.get("totalCount", 0):
                 break
-        if _groups:
-            # 规格值最全的 specId = 店铺统一规格
-            target_spec_id = max(_groups, key=lambda s: len(_groups[s]))
-            target_spec_values = {
-                nm: {"specId": target_spec_id, "specValueId": vid}
-                for nm, vid in _groups[target_spec_id].items()
-            }
-    except Exception:
-        pass
+
+    try:
+        await _harvest(1, 2)   # 在售前 40 个
+    except Exception as e:
+        log.warning("[push-to-store] 采集在售规格失败: %s", e)
+    log.info("[push-to-store] 在售规格组: %s",
+             {s: (target_spec_names.get(s), list(v)) for s, v in target_spec_groups.items()})
+
+    _enriched = {"done": False}
+
+    async def _enrich_from_offline():
+        """在售池覆盖不了时才补扫下架商品(有界)。仍然全程只用一个 specId，
+        不会重蹈 7-31 那次 specId 不一致的错。"""
+        if _enriched["done"]:
+            return
+        _enriched["done"] = True
+        try:
+            await _harvest(0, 8)   # 最多 160 个下架商品
+            log.info("[push-to-store] 已补扫下架商品，规格组数=%d", len(target_spec_groups))
+        except Exception as e:
+            log.warning("[push-to-store] 补扫下架商品失败: %s", e)
+
+    def _match_in_group(name: str, grp: dict):
+        """把一个源规格值名映射到 grp 里【已存在】的规格值。匹配不上返回 None —— 绝不猜。"""
+        nm = (name or "").strip()
+        if not nm:
+            return None
+        if nm in grp:
+            return (grp[nm], nm)
+        base = nm.split("(")[0].split("（")[0].strip()
+        if base and base in grp:
+            return (grp[base], base)
+        # 仓别关键字：香港必须先于现货判，否则"香港仓现货"会被错配成"国内现货"
+        if "香港" in nm:
+            need = lambda k: "香港" in k
+        elif "加州" in nm or "美国" in nm:
+            need = lambda k: ("加州" in k or "美国" in k)
+        elif "直邮" in nm:
+            need = lambda k: "直邮" in k
+        elif "现货" in nm:
+            need = lambda k: ("现货" in k and "香港" not in k)
+        else:
+            return None
+        cands = [k for k in grp if need(k)]
+        if not cands:
+            return None
+        best = sorted(cands, key=lambda k: (abs(len(k) - len(nm)), k))[0]
+        return (grp[best], best)
+
+    async def _pick_spec_group(src_names: list):
+        """按【本产品自己的规格值】挑一个能全覆盖的 specId。
+        返回 (specId, {源名: (目标valueId, 目标名)}, 未覆盖的源名)。
+        ⛔ 没有"随便挑第一个"的兜底 —— 那正是把规格写成"三包装"的原因。"""
+        for _round in (0, 1):
+            best = None
+            for sid, grp in target_spec_groups.items():
+                mapped, miss = {}, []
+                for nm in src_names:
+                    m = _match_in_group(nm, grp)
+                    if m:
+                        mapped[nm] = m
+                    else:
+                        miss.append(nm)
+                if miss:
+                    continue
+                exact = sum(1 for nm in src_names if nm in grp)
+                score = (exact, -len(grp))
+                if best is None or score > best[0]:
+                    best = (score, sid, mapped)
+            if best:
+                return best[1], best[2], []
+            if _round == 0:
+                await _enrich_from_offline()
+        miss_all = list(src_names)
+        for sid, grp in target_spec_groups.items():
+            miss = [nm for nm in src_names if not _match_in_group(nm, grp)]
+            if len(miss) < len(miss_all):
+                miss_all = miss
+        return None, {}, miss_all
 
     db_products = db.query(Product).filter(Product.id.in_(product_ids)).all()
     if not db_products:
@@ -700,117 +783,89 @@ async def push_products_to_store(
             sale_price = str(product.retail_price) if product.retail_price else "0.01"
             cost_price = float(product.supply_price) if product.supply_price else None
 
-            # 构建规格和SKU：必须使用目标店铺已有的specId/specValueId
+            # 构建规格和SKU：必须使用目标店铺已有的 specId/specValueId，
+            # 且 specInfoList 与 skuList 全程只用【同一个】specId，否则微盟报"规格里不存在sku规格"。
             spec_info_list = []
-            if is_multi_sku and source_spec_list and source_sku_list and target_spec_values:
-                # 匹配源规格值到目标已有值
-                def _match_spec_value(name):
-                    """模糊匹配规格值名称到目标店铺已有的specValueId"""
-                    if name in target_spec_values:
-                        return target_spec_values[name]
-                    # 去括号内容匹配
-                    base = name.split("(")[0].split("（")[0].strip()
-                    if base in target_spec_values:
-                        return target_spec_values[base]
-                    # 关键字匹配
-                    if "直邮" in name:
-                        for k, v in target_spec_values.items():
-                            if "直邮" in k:
-                                return v
-                    if "现货" in name:
-                        for k, v in target_spec_values.items():
-                            if "现货" in k and "香港" not in k:
-                                return v
-                    if "香港" in name:
-                        for k, v in target_spec_values.items():
-                            if "香港" in k:
-                                return v
-                    # 默认返回第一个
-                    first = list(target_spec_values.values())
-                    return first[0] if first else None
+            if is_multi_sku and source_spec_list and source_sku_list:
+                # 本产品实际用到的源规格值名（去重保序）
+                src_names = []
+                for spec in source_spec_list:
+                    for sv in spec.get("skuSpecValueList", []):
+                        nm = (sv.get("specValueName") or "").strip()
+                        if nm and nm not in src_names:
+                            src_names.append(nm)
 
-                # 建立映射：源(specId, specValueId) → 目标specValueId
+                grp_sid, name_map, unmapped = await _pick_spec_group(src_names)
+                if unmapped or not grp_sid:
+                    raise ValueError(
+                        "目标店铺没有这些规格值，已跳过不推送（绝不拿无关规格值顶替）："
+                        + "、".join(unmapped or src_names)
+                        + "。请先在倍赛思后台把含这些规格值的商品上架，或把本商品改成统一规格再同步。"
+                    )
+
+                target_spec_id = grp_sid
+                # 源(specId, specValueId) → 目标(specValueId, 目标规格值名)
                 src_to_target = {}
-                used_target_values = []
                 for spec in source_spec_list:
                     src_sid = spec.get("specId")
                     for sv in spec.get("skuSpecValueList", []):
-                        src_vid = sv.get("specValueId")
-                        matched = _match_spec_value(sv.get("specValueName", ""))
-                        if matched:
-                            src_to_target[(src_sid, src_vid)] = matched
-                            if matched not in used_target_values:
-                                used_target_values.append(matched)
+                        nm = (sv.get("specValueName") or "").strip()
+                        if nm in name_map:
+                            src_to_target[(src_sid, sv.get("specValueId"))] = name_map[nm]
 
-                if used_target_values and target_spec_id:
-                    spec_info_list = [{
-                        "specId": target_spec_id,
-                        "specName": "规格",
-                        "skuSpecValueList": [
-                            {"specValueId": v["specValueId"], "specValueName": k}
-                            for k, v in target_spec_values.items()
-                            if v in used_target_values
-                        ],
-                    }]
+                used = []
+                for _tv in name_map.values():
+                    if _tv not in used:
+                        used.append(_tv)
+                spec_info_list = [{
+                    "specId": target_spec_id,
+                    "specName": target_spec_names.get(target_spec_id) or "规格",
+                    "skuSpecValueList": [
+                        {"specValueId": _vid, "specValueName": _nm} for _vid, _nm in used
+                    ],
+                }]
+                log.info("[push-to-store] %s → specId=%s(%s) 规格映射 %s",
+                         product.name, target_spec_id,
+                         target_spec_names.get(target_spec_id),
+                         {k: v[1] for k, v in name_map.items()})
 
-                    sku_list = []
-                    seen_spec_combos = set()
-                    for idx, src_sku in enumerate(source_sku_list):
-                        if src_sku.get("isDisabled"):
-                            continue
-                        # 所有规格SKU统一使用商品编码（outerGoodsCode），不加后缀
-                        outer_code = product.sku or ""
-                        sku_entry = {
-                            "salePrice": sale_price,
-                            "skuStockNum": src_sku.get("skuStockNum", 0),
-                            "outerSkuCode": outer_code,
-                            "skuPreStockNum": 0,
-                            "skuSpecValueList": [],
-                        }
-                        if cost_price is not None:
-                            sku_entry["costPrice"] = cost_price
-                        for sv in src_sku.get("skuSpecValueList", []):
-                            key = (sv.get("specId"), sv.get("specValueId"))
-                            matched = src_to_target.get(key)
-                            if matched:
-                                sku_entry["skuSpecValueList"].append({
-                                    # 必须用统一 specId（=specInfoList 的 specId），绝不能用 matched 自带的，
-                                    # 否则 sku 规格 specId 与 specInfoList 对不上 → 微盟报"规格里不存在sku规格"
-                                    "specId": target_spec_id,
-                                    "specValueId": matched["specValueId"],
-                                })
-                        if sku_entry["skuSpecValueList"]:
-                            # 去重：不允许两个SKU指向同一个specValueId组合
-                            combo_key = tuple(sv["specValueId"] for sv in sku_entry["skuSpecValueList"])
-                            if combo_key not in seen_spec_combos:
-                                seen_spec_combos.add(combo_key)
-                                sku_list.append(sku_entry)
-
-                    def _single_sku(stock):
-                        entry = {"salePrice": sale_price, "skuStockNum": stock, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
-                        if cost_price is not None:
-                            entry["costPrice"] = cost_price
-                        return entry
-
-                    if not sku_list:
-                        # 匹配失败，降级为单SKU
-                        stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
-                        sku_list = [_single_sku(stock_num)]
-                        is_multi_sku = False
-                        spec_info_list = []
-                    else:
-                        # 确保 skuList 数量不超过 specInfoList 中规格值组合数
-                        max_skus = len(spec_info_list[0]["skuSpecValueList"]) if spec_info_list else 1
-                        if len(sku_list) > max_skus:
-                            sku_list = sku_list[:max_skus]
-                else:
-                    # 没有可用的目标规格值，降级为单SKU
-                    stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
-                    single = {"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
+                sku_list = []
+                seen_spec_combos = set()
+                for src_sku in source_sku_list:
+                    if src_sku.get("isDisabled"):
+                        continue
+                    sku_entry = {
+                        "salePrice": sale_price,
+                        "skuStockNum": src_sku.get("skuStockNum", 0),
+                        "outerSkuCode": product.sku or "",
+                        "skuPreStockNum": 0,
+                        "skuSpecValueList": [],
+                    }
                     if cost_price is not None:
-                        single["costPrice"] = cost_price
-                    sku_list = [single]
-                    is_multi_sku = False
+                        sku_entry["costPrice"] = cost_price
+                    for sv in src_sku.get("skuSpecValueList", []):
+                        matched = src_to_target.get((sv.get("specId"), sv.get("specValueId")))
+                        if matched:
+                            sku_entry["skuSpecValueList"].append({
+                                "specId": target_spec_id,
+                                "specValueId": matched[0],
+                            })
+                    if not sku_entry["skuSpecValueList"]:
+                        continue
+                    combo_key = tuple(x["specValueId"] for x in sku_entry["skuSpecValueList"])
+                    if combo_key in seen_spec_combos:
+                        log.warning("[push-to-store] %s 丢弃重复规格组合 %s", product.name, combo_key)
+                        continue
+                    seen_spec_combos.add(combo_key)
+                    sku_list.append(sku_entry)
+
+                if not sku_list:
+                    raise ValueError("源商品规格值无法映射到目标店铺，已跳过不推送")
+                _max_skus = len(spec_info_list[0]["skuSpecValueList"])
+                if len(sku_list) > _max_skus:
+                    log.warning("[push-to-store] %s skuList(%d) 超过规格值数(%d)，截断",
+                                product.name, len(sku_list), _max_skus)
+                    sku_list = sku_list[:_max_skus]
             else:
                 stock_num = source_sku_list[0].get("skuStockNum", 9999) if source_sku_list else 9999
                 single = {"salePrice": sale_price, "skuStockNum": stock_num, "outerSkuCode": product.sku or "", "skuPreStockNum": 0}
