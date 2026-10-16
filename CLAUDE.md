@@ -139,7 +139,10 @@ DELETE FROM settlements WHERE wemall_store_id = 1;
 
 ### 自动任务（scheduler.py）
 - **订单同步**：每 10 分钟从微盟同步一次订单（使用激活店铺凭证）
-- **汇率更新**：每天早上 9 点自动获取汇率
+- **汇率更新**：每天早上 9 点（北京）自动获取汇率
+- **自动结算**：每月 **16号 00:15** 出 1-15号账单、**1号 00:15** 出上月16号-月底账单（北京）。汇率用期末当天的（结算时当天汇率还没抓，自动退回最近一条）。
+- ⛔⛔ **每个 `CronTrigger(...)` 必须显式写 `timezone=BJ`**（2026-10-16 根治）：APScheduler 3.x 直接构造的 CronTrigger 不传时区时用**容器本地时区 UTC**，不继承 `AsyncIOScheduler(timezone=...)`。以前全没写 → 所有任务晚 8 小时（"9点汇率"实际北京 17:00、"16号10:05结算"实际北京 18:05），用户以为账单没自动出。服务器容器和 MySQL 都是 **UTC**，查库里的 created_at 要 +8 小时再看。
+- 定时任务日志前缀 `[scheduler]`，`docker compose logs backend | grep scheduler` 可看到每个任务的下次运行时间和执行结果（以前一行都看不到）。
 - **退货订单处理**：新退货订单不入库，已有订单同步退款状态
 
 ### 汇率服务（exchange_rate_service.py）
